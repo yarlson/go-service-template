@@ -7,6 +7,9 @@ This service template written in Go represents a scalable and maintainable archi
 ### Core Server
 The core server is constructed with a focus on modular design, where each package serves a well-defined purpose. The server consists of an HTTP server to handle requests, equipped with a router that defines routes and includes relevant middleware such as logging and JWT authentication.
 
+### OpenAPI 3.1 Documentation
+The service includes auto-generated OpenAPI 3.1 documentation, making it easier to understand the available endpoints and their specifications. The documentation is generated with Swag and can be updated using the provided Makefile.
+
 ### Metrics Server
 A separate metrics server serves Prometheus metrics, allowing for easy observability and monitoring.
 
@@ -24,6 +27,7 @@ Various middleware functions are used to manage concerns like logging, JWT authe
 1. **Configuration**: Set up the necessary environment variables. More on this in the Environment Variables section below.
 2. **Build**: Compile the Go code using `go build -o my_service ./cmd/main.go`.
 3. **Run**: Execute the binary `./my_service`.
+4. **OpenAPI Generation**: Use the Makefile for generating the OpenAPI spec by running `make openapi`.
 
 ## Environment Variables
 

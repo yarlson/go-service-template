@@ -13,6 +13,20 @@ import (
 	"time"
 )
 
+//	@title					Go Service Template API
+//	@version				1.0
+//	@description			This is a sample server for a Go service template.
+//	@termsOfService			http://swagger.io/terms/
+//	@contact.name			API Support
+//	@contact.url			http://www.swagger.io/support
+//	@contact.email			support@swagger.io
+//	@license.name			Apache 2.0
+//	@license.url			http://www.apache.org/licenses/LICENSE-2.0.html
+//	@servers.url			http://localhost
+//	@servers.description	http
+//	@servers.url			https://localhost
+//	@servers.description	https
+
 func main() {
 	// Retrieve the shared logger instance
 	log := infrastructure.GetLog()
