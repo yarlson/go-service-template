@@ -1,33 +1,41 @@
 package infrastructure
 
 import (
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
-func Test_initializeLog(t *testing.T) {
-	initializeLog()
-	assert.NotNil(t, log)
-	_, ok := log.Formatter.(*logrus.JSONFormatter)
-	assert.True(t, ok, "Expected JSONFormatter")
-}
+var _ = ginkgo.Describe("Logger", func() {
+	ginkgo.Describe("initializeLog", func() {
+		ginkgo.It("should initialize log with JSONFormatter", func() {
+			initializeLog()
+			gomega.Expect(log).ShouldNot(gomega.BeNil())
+			_, ok := log.Formatter.(*logrus.JSONFormatter)
+			gomega.Expect(ok).To(gomega.BeTrue(), "Expected JSONFormatter")
+		})
+	})
 
-func TestGetLog(t *testing.T) {
-	// Ensuring log is nil to test initialization
-	log = nil
+	ginkgo.Describe("GetLog", func() {
+		ginkgo.It("should return initialized logger with JSONFormatter", func() {
+			// Ensuring log is nil to test initialization
+			log = nil
 
-	logger := GetLog()
-	assert.NotNil(t, logger)
-	_, ok := logger.Formatter.(*logrus.JSONFormatter)
-	assert.True(t, ok, "Expected JSONFormatter")
+			logger := GetLog()
+			gomega.Expect(logger).ShouldNot(gomega.BeNil())
+			_, ok := logger.Formatter.(*logrus.JSONFormatter)
+			gomega.Expect(ok).To(gomega.BeTrue(), "Expected JSONFormatter")
 
-	// Ensuring that the logger returned is a singleton
-	logger2 := GetLog()
-	assert.Equal(t, logger, logger2, "Expected the same logger instance")
-}
+			// Ensuring that the logger returned is a singleton
+			logger2 := GetLog()
+			gomega.Expect(logger).To(gomega.Equal(logger2), "Expected the same logger instance")
+		})
+	})
 
-func TestSetLog(t *testing.T) {
-	SetLog(logrus.New())
-	assert.NotNil(t, log)
-}
+	ginkgo.Describe("SetLog", func() {
+		ginkgo.It("should set the logger", func() {
+			SetLog(logrus.New())
+			gomega.Expect(log).ShouldNot(gomega.BeNil())
+		})
+	})
+})

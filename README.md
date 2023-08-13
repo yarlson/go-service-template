@@ -22,12 +22,16 @@ Logrus, a popular structured logger for Go, is employed for consistent logging a
 ### Middleware
 Various middleware functions are used to manage concerns like logging, JWT authentication, and metrics collection.
 
+### Testing with Ginkgo
+Tests are written using Ginkgo, a BDD-style Go testing framework. This facilitates better structure and readability of test cases.
+
 ## How to Use
 
 1. **Configuration**: Set up the necessary environment variables. More on this in the Environment Variables section below.
 2. **Build**: Compile the Go code using `go build -o my_service ./cmd/main.go`.
 3. **Run**: Execute the binary `./my_service`.
 4. **OpenAPI Generation**: Use the Makefile for generating the OpenAPI spec by running `make openapi`.
+5. **Testing**: Run tests with Ginkgo by executing `ginkgo ./...` within the project directory.
 
 ## Environment Variables
 
@@ -55,7 +59,3 @@ The following table describes the environment variables that the system uses:
 Additional settings for the application, such as the application version or the specific range for the Redis database index, are also configurable.
 
 For a more detailed explanation and the corresponding code files, please refer to the source code of the project.
-
-## Conclusion
-
-This Go service template is an example of how thoughtful architecture design can lead to a maintainable and scalable codebase. By following the principles of separation of concerns and leveraging well-known libraries, the template provides a solid foundation for building robust services in Go.

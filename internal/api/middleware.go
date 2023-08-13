@@ -49,7 +49,7 @@ func JwtMiddleware(publicKey string) func(http.Handler) http.Handler {
 			formattedPublicKey := strings.Replace(publicKey, "||", "\n", -1) // Replace || with newlines
 			parsedKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(formattedPublicKey))
 			if err != nil {
-				http.Error(w, "Failed to parse public key", http.StatusInternalServerError)
+				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
 			}
 
