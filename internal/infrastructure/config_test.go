@@ -156,3 +156,8 @@ func TestLoadDefaultConfigError(t *testing.T) {
 	// Verify if the error is as expected
 	assert.Error(t, err)
 }
+
+// Initialize the logger
+func init() {
+	GetLog()
+}
