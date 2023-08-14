@@ -59,3 +59,7 @@ The following table describes the environment variables that the system uses:
 Additional settings for the application, such as the application version or the specific range for the Redis database index, are also configurable.
 
 For a more detailed explanation and the corresponding code files, please refer to the source code of the project.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
