@@ -1,0 +1,11 @@
+*
+!go.mod
+!go.sum
+!api/
+!api/**
+!cmd/
+!cmd/**
+!db/
+!db/**
+!internal/
+!internal/**

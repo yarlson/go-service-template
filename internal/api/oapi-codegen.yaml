@@ -1,0 +1,9 @@
+package: api
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+output: api.gen.go
+output-options:
+  prefer-skip-optional-pointer-with-omitzero: true
