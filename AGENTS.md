@@ -150,6 +150,8 @@ generated interface. Keep `/openapi.yaml` serving the exact canonical document.
   when the test and its dependencies are safe to run concurrently.
 - Keep HTTP infrastructure tests independent of feature implementations. Keep
   request/response mapping tests beside the owning feature HTTP adapter.
+- Verify telemetry changes through emitted spans or metrics at the instrumented
+  boundary, using in-memory SDK test utilities instead of a real collector.
 - Use Testcontainers only for integration tests where real PostgreSQL semantics
   matter. Do not require a developer-managed database, fixed port, or shared
   schema.
