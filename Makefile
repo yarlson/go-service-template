@@ -4,6 +4,7 @@ BINARY := bin/service
 MODULE :=
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+SOURCE_URL ?= https://github.com/yarlson/go-service-template
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 .DEFAULT_GOAL := help
@@ -63,7 +64,7 @@ build: ## Build the production binary
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/service
 
 docker-build: ## Build the production container image
-	docker build --build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' -t go-service-template:local .
+	docker build --build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE_URL='$(SOURCE_URL)' -t go-service-template:local .
 
 docker-test: ## Smoke-test the production container
 	./scripts/docker-smoke-test.sh

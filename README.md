@@ -140,7 +140,9 @@ at `/metrics`, including PostgreSQL readiness availability and check duration.
 
 The production image runs as a non-root distroless user and embeds migrations.
 Run the same image with `migrate` before rolling out `api`; do not run migrations
-concurrently from every API replica.
+concurrently from every API replica. OCI labels expose the image source, version,
+revision, and license. `make docker-build` derives version and revision from the
+build variables; set `SOURCE_URL` when publishing from a different repository.
 
 ## License
 

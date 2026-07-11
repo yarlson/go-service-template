@@ -4,7 +4,14 @@ set -eu
 project=go-service-template-smoke
 image=go-service-template:smoke
 container=go-service-template-smoke-api
+version=smoke
+commit=smoke-commit
+source_url=https://github.com/example/service
 export POSTGRES_PORT=0
+
+image_label() {
+  docker image inspect --format "{{ index .Config.Labels \"$1\" }}" "$image"
+}
 
 cleanup() {
   status=$?
@@ -23,7 +30,15 @@ postgres_container=$(docker compose -p "$project" ps -q postgres)
 network=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$postgres_container")
 database_url='postgres://serviceuser:pass@postgres:5432/service_db?sslmode=disable'
 
-docker build -t "$image" .
+docker build \
+  --build-arg VERSION="$version" \
+  --build-arg COMMIT="$commit" \
+  --build-arg SOURCE_URL="$source_url" \
+  -t "$image" .
+test "$(image_label org.opencontainers.image.source)" = "$source_url"
+test "$(image_label org.opencontainers.image.version)" = "$version"
+test "$(image_label org.opencontainers.image.revision)" = "$commit"
+test "$(image_label org.opencontainers.image.licenses)" = MIT
 docker run --rm --network "$network" -e DATABASE_URL="$database_url" "$image" migrate
 docker run -d --name "$container" --network "$network" -p 18080:8080 \
   -e APP_ENV=development \

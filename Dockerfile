@@ -27,5 +27,13 @@ USER nonroot:nonroot
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD ["/service", "healthcheck"]
 
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG SOURCE_URL=https://github.com/yarlson/go-service-template
+LABEL org.opencontainers.image.source="${SOURCE_URL}" \
+    org.opencontainers.image.version="${VERSION}" \
+    org.opencontainers.image.revision="${COMMIT}" \
+    org.opencontainers.image.licenses="MIT"
+
 ENTRYPOINT ["/service"]
 CMD ["api"]

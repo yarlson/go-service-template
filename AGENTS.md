@@ -213,6 +213,9 @@ Before finishing:
   tooling must not invalidate the Docker build cache. When compilation starts
   depending on a new top-level path, add that path deliberately and verify it
   with `make docker-test`.
+- Preserve the production image's OCI source, version, revision, and license
+  labels. Keep their values aligned with the binary build metadata and verify
+  label changes with `make docker-test`.
 - Keep the placeholder module path until a template consumer intentionally runs
   `make rename MODULE=github.com/acme/service`.
 - Make surgical changes and preserve unrelated user work in the worktree.
