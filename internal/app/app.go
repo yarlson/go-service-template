@@ -78,7 +78,7 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,
-		Handler:           otelhttp.NewHandler(handler, "http.server"),
+		Handler:           instrumentHTTP(handler),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
@@ -107,6 +107,10 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 		}
 		return nil
 	}
+}
+
+func instrumentHTTP(handler http.Handler, options ...otelhttp.Option) http.Handler {
+	return otelhttp.NewHandler(handler, "http.server", options...)
 }
 
 func RunMigrations(databaseURL string) error {
