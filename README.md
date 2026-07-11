@@ -14,7 +14,7 @@ behavior without prescribing queues, schedulers, caches, or a web framework.
 - Embedded SQL migrations through `golang-migrate`
 - OIDC JWT bearer authentication through `go-oidc`
 - Structured logging through `log/slog`
-- Optional OTLP tracing through OpenTelemetry
+- Optional OTLP tracing and Prometheus metrics through OpenTelemetry
 - Testify assertions and isolated PostgreSQL integration tests through Testcontainers
 - golangci-lint v2, `govulncheck`, race tests, Docker, and GitHub Actions
 
@@ -50,6 +50,7 @@ Runtime endpoints:
 - `GET /livez` checks only that the process can serve HTTP.
 - `GET /readyz` performs a bounded PostgreSQL check.
 - `GET /openapi.yaml` returns the canonical API contract.
+- `GET /metrics` returns Prometheus metrics; restrict it at the network boundary.
 
 ## Commands
 
@@ -134,7 +135,8 @@ Logs are text locally and JSON elsewhere. Every response includes
 `X-Request-ID`; a valid incoming value is propagated, otherwise one is created.
 Set `LOG_LEVEL` to `debug`, `info`, `warn`, or `error`; the default is `info`.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to enable batched OTLP/HTTP traces. Empty means
-no exporter.
+no trace exporter. Prometheus HTTP and Go runtime metrics are always available
+at `/metrics`, including PostgreSQL readiness availability and check duration.
 
 The production image runs as a non-root distroless user and embeds migrations.
 Run the same image with `migrate` before rolling out `api`; do not run migrations

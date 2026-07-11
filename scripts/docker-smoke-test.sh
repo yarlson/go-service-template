@@ -54,6 +54,9 @@ case "$user_id" in
   *) echo "created user ID is not UUIDv7: $user_id" >&2; exit 1 ;;
 esac
 curl --fail --silent "http://127.0.0.1:18080/v1/users/$user_id" >/dev/null
+metrics=$(curl --fail --silent http://127.0.0.1:18080/metrics)
+printf '%s' "$metrics" | grep -q 'http_server_request_duration_seconds'
+printf '%s' "$metrics" | grep -Eq '^service_database_available(\{[^}]*\})? 1$'
 
 docker stop --time 5 "$container" >/dev/null
 test "$(docker inspect -f '{{.State.ExitCode}}' "$container")" = 0

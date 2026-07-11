@@ -53,6 +53,11 @@ func RequestID(ctx context.Context) string {
 
 func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		started := time.Now()
 		response := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(response, r)

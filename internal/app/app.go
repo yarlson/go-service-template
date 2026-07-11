@@ -30,14 +30,14 @@ type BuildInfo struct {
 }
 
 func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build BuildInfo) error {
-	shutdownTelemetry, err := telemetry.Setup(ctx, cfg.ServiceName, build.Version, cfg.OTLPHTTPEndpoint)
+	telemetryRuntime, err := telemetry.Setup(ctx, cfg.ServiceName, build.Version, cfg.OTLPHTTPEndpoint)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := shutdownTelemetry(shutdownCtx); err != nil {
+		if err := telemetryRuntime.Shutdown(shutdownCtx); err != nil {
 			logger.Error("shutdown telemetry", "error", err)
 		}
 	}()
@@ -63,12 +63,13 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 	repository := userspostgres.NewUserRepository(queries)
 	userService := users.NewService(repository)
 	usersHandler := usershttp.NewHandler(logger, userService)
-	readiness := httpserver.NewReadiness(pool)
+	readiness := httpserver.NewReadiness(pool, telemetryRuntime.RecordDatabaseCheck)
 	handler, err := httpserver.NewHandler(httpserver.HandlerOptions{
 		Logger:    logger,
 		API:       usersHandler,
 		Auth:      authentication,
 		Readiness: readiness,
+		Metrics:   telemetryRuntime.MetricsHandler,
 		Version:   build.Version,
 		Commit:    build.Commit,
 	})
@@ -77,8 +78,10 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 	}
 
 	server := &http.Server{
-		Addr:              cfg.HTTPAddress,
-		Handler:           instrumentHTTP(handler),
+		Addr: cfg.HTTPAddress,
+		Handler: instrumentHTTP(handler, otelhttp.WithFilter(func(request *http.Request) bool {
+			return request.URL.Path != "/metrics"
+		})),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
