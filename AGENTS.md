@@ -65,6 +65,9 @@ The canonical inputs are:
 - `internal/<feature>/postgres/queries.sql` for feature queries.
 - `.env.example` for documented runtime configuration.
 
+The config test suite enforces an exact match between `Config` environment tags
+and `.env.example`. Update both in the same change.
+
 Generated Go files are committed but must not be edited manually:
 
 - `internal/api/api.gen.go`

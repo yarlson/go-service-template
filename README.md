@@ -32,6 +32,8 @@ make dev
 
 `bootstrap` creates `.env`, starts PostgreSQL, and applies migrations. Local
 configuration disables authentication; production configuration cannot do so.
+The test suite verifies that `.env.example` and the typed configuration remain
+in sync.
 
 Create and fetch a user:
 
