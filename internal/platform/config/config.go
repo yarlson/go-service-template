@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
@@ -18,11 +19,32 @@ const (
 
 	AuthModeDisabled = "disabled"
 	AuthModeOIDC     = "oidc"
+
+	LogLevelDebug = LogLevel("debug")
+	LogLevelInfo  = LogLevel("info")
+	LogLevelWarn  = LogLevel("warn")
+	LogLevelError = LogLevel("error")
 )
+
+type LogLevel string
+
+func (l LogLevel) SlogLevel() slog.Level {
+	switch l {
+	case LogLevelDebug:
+		return slog.LevelDebug
+	case LogLevelWarn:
+		return slog.LevelWarn
+	case LogLevelError:
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
 
 type Config struct {
 	Environment      string        `env:"APP_ENV" envDefault:"development"`
 	ServiceName      string        `env:"SERVICE_NAME" envDefault:"go-service-template"`
+	LogLevel         LogLevel      `env:"LOG_LEVEL" envDefault:"info"`
 	HTTPAddress      string        `env:"HTTP_ADDRESS" envDefault:":8080"`
 	DatabaseURL      string        `env:"DATABASE_URL,required"`
 	AuthMode         string        `env:"AUTH_MODE" envDefault:"oidc"`
@@ -78,6 +100,9 @@ func (c Config) Validate() error {
 	if c.ServiceName == "" {
 		return errors.New("SERVICE_NAME is required")
 	}
+	if !oneOf(c.LogLevel, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError) {
+		return errors.New("LOG_LEVEL must be debug, info, warn, or error")
+	}
 
 	if err := validateAddress(c.HTTPAddress); err != nil {
 		return fmt.Errorf("HTTP_ADDRESS: %w", err)
@@ -104,7 +129,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func oneOf(value string, allowed ...string) bool {
+func oneOf[T comparable](value T, allowed ...T) bool {
 	for _, candidate := range allowed {
 		if value == candidate {
 			return true

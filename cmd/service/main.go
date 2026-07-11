@@ -35,7 +35,7 @@ func run(arguments []string) error {
 		if err != nil {
 			return err
 		}
-		logger := newLogger(cfg.Environment)
+		logger := newLogger(cfg.Environment, cfg.LogLevel.SlogLevel())
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		return app.RunAPI(ctx, cfg, logger, app.BuildInfo{Version: version, Commit: commit})
@@ -56,8 +56,8 @@ func run(arguments []string) error {
 	}
 }
 
-func newLogger(environment string) *slog.Logger {
-	options := &slog.HandlerOptions{Level: slog.LevelInfo}
+func newLogger(environment string, level slog.Level) *slog.Logger {
+	options := &slog.HandlerOptions{Level: level}
 	if environment == config.EnvironmentDevelopment {
 		return slog.New(slog.NewTextHandler(os.Stdout, options))
 	}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,6 +20,7 @@ func TestValidate(t *testing.T) {
 	valid := Config{
 		Environment:     EnvironmentProduction,
 		ServiceName:     "test-service",
+		LogLevel:        LogLevelInfo,
 		HTTPAddress:     ":8080",
 		DatabaseURL:     "postgres://user:pass@localhost:5432/service?sslmode=disable",
 		AuthMode:        AuthModeOIDC,
@@ -31,6 +33,7 @@ func TestValidate(t *testing.T) {
 		change func(*Config)
 	}{
 		"invalid environment": {change: func(c *Config) { c.Environment = "staging" }},
+		"invalid log level":   {change: func(c *Config) { c.LogLevel = "trace" }},
 		"invalid address":     {change: func(c *Config) { c.HTTPAddress = "8080" }},
 		"invalid database":    {change: func(c *Config) { c.DatabaseURL = "mysql://localhost/db" }},
 		"unknown auth mode":   {change: func(c *Config) { c.AuthMode = "basic" }},
@@ -55,6 +58,18 @@ func TestValidate(t *testing.T) {
 	}
 
 	require.NoError(t, valid.Validate())
+}
+
+func TestLoadParsesLogLevel(t *testing.T) {
+	t.Setenv("APP_ENV", EnvironmentTest)
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/service?sslmode=disable")
+	t.Setenv("AUTH_MODE", AuthModeDisabled)
+	t.Setenv("LOG_LEVEL", "debug")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, LogLevelDebug, cfg.LogLevel)
+	assert.Equal(t, slog.LevelDebug, cfg.LogLevel.SlogLevel())
 }
 
 func TestEnvironmentExampleMatchesConfig(t *testing.T) {
