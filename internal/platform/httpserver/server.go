@@ -52,13 +52,16 @@ type Pinger interface {
 	Ping(context.Context) error
 }
 
+type ReadinessObserver func(context.Context, time.Duration, error)
+
 type Readiness struct {
 	pinger    Pinger
+	observer  ReadinessObserver
 	accepting atomic.Bool
 }
 
-func NewReadiness(pinger Pinger) *Readiness {
-	readiness := &Readiness{pinger: pinger}
+func NewReadiness(pinger Pinger, observer ReadinessObserver) *Readiness {
+	readiness := &Readiness{pinger: pinger, observer: observer}
 	readiness.accepting.Store(true)
 	return readiness
 }
@@ -72,13 +75,14 @@ type HandlerOptions struct {
 	API       contractapi.StrictServerInterface
 	Auth      Authentication
 	Readiness *Readiness
+	Metrics   http.Handler
 	Version   string
 	Commit    string
 }
 
 func NewHandler(options HandlerOptions) (http.Handler, error) {
-	if options.Logger == nil || options.API == nil || options.Readiness == nil || options.Readiness.pinger == nil {
-		return nil, errors.New("logger, API, and readiness are required")
+	if options.Logger == nil || options.API == nil || options.Readiness == nil || options.Readiness.pinger == nil || options.Metrics == nil {
+		return nil, errors.New("logger, API, readiness, and metrics are required")
 	}
 	if !options.Auth.disabled && options.Auth.verifier == nil {
 		return nil, errors.New("authentication is not configured")
@@ -117,6 +121,7 @@ func NewHandler(options HandlerOptions) (http.Handler, error) {
 	root.Handle("/v1/", validatedAPI)
 	root.HandleFunc("GET /livez", healthHandler(http.StatusOK, options.Version, options.Commit))
 	root.HandleFunc("GET /readyz", readinessHandler(options.Readiness, options.Version, options.Commit))
+	root.Handle("GET /metrics", options.Metrics)
 	root.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(contract.OpenAPI)
@@ -202,7 +207,12 @@ func readinessHandler(readiness *Readiness, version, commit string) http.Handler
 
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		if err := readiness.pinger.Ping(ctx); err != nil {
+		started := time.Now()
+		err := readiness.pinger.Ping(ctx)
+		if readiness.observer != nil {
+			readiness.observer(ctx, time.Since(started), err)
+		}
+		if err != nil {
 			writeHealth(w, http.StatusServiceUnavailable, version, commit)
 			return
 		}

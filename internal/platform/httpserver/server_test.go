@@ -94,6 +94,18 @@ func TestHandlerServesCanonicalContract(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "openapi: 3.0.3")
 }
 
+func TestHandlerServesMetrics(t *testing.T) {
+	t.Parallel()
+
+	handler := newTestHandler(t, &apiStub{}, httpserver.DisabledAuthentication(), pingerStub{})
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "service_requests_total 1\n", response.Body.String())
+}
+
 func TestHandlerRequestID(t *testing.T) {
 	t.Parallel()
 
@@ -126,9 +138,12 @@ func newTestHandler(t *testing.T, api contractapi.StrictServerInterface, authent
 		Logger:    logger,
 		API:       api,
 		Auth:      authentication,
-		Readiness: httpserver.NewReadiness(pinger),
-		Version:   "test",
-		Commit:    "test",
+		Readiness: httpserver.NewReadiness(pinger, nil),
+		Metrics: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, "service_requests_total 1\n")
+		}),
+		Version: "test",
+		Commit:  "test",
 	})
 	require.NoError(t, err)
 	return handler

@@ -116,13 +116,16 @@ generated interface. Keep `/openapi.yaml` serving the exact canonical document.
   server interface. Do not add a web framework without an explicit requirement.
 - `internal/platform/httpserver` owns shared concerns: routing, validation,
   authentication context, request IDs, body limits, recovery, logging, probes,
-  and serving the canonical contract.
+  metrics exposure, and serving the canonical contract.
 - Feature HTTP handlers only translate transport data, call a use case, and map
   domain results or errors to generated responses.
 - Return documented errors as `application/problem+json`. Do not invent
   undocumented response shapes.
 - Preserve the distinction between `/livez` and `/readyz`: liveness checks the
   process; readiness checks whether it can serve traffic, including PostgreSQL.
+- Keep `/metrics` unauthenticated for Prometheus scraping, exclude it from its
+  own HTTP telemetry and request logs, and restrict it at the deployment network
+  boundary.
 - The API process must not apply schema migrations during startup. Migrations
   run through the explicit `service migrate` command before rollout.
 - Authentication may be disabled only in development and tests. Production
