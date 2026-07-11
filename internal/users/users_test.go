@@ -19,6 +19,7 @@ func TestServiceCreateNormalizesEmail(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "person@example.com", created.Email)
 	assert.NotEqual(t, uuid.Nil, created.ID)
+	assert.Equal(t, uuid.Version(7), created.ID.Version())
 }
 
 func TestServiceCreateRejectsInvalidEmail(t *testing.T) {

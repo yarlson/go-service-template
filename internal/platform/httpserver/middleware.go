@@ -14,11 +14,17 @@ import (
 
 type requestIDKey struct{}
 
-func requestIDMiddleware(next http.Handler) http.Handler {
+func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
 		if !validRequestID(requestID) {
-			requestID = uuid.NewString()
+			generatedRequestID, err := uuid.NewV7()
+			if err != nil {
+				logger.ErrorContext(r.Context(), "generate request ID", "error", err)
+				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "")
+				return
+			}
+			requestID = generatedRequestID.String()
 		}
 
 		w.Header().Set("X-Request-ID", requestID)

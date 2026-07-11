@@ -124,7 +124,7 @@ func NewHandler(options HandlerOptions) (http.Handler, error) {
 
 	return chain(
 		root,
-		requestIDMiddleware,
+		func(next http.Handler) http.Handler { return requestIDMiddleware(options.Logger, next) },
 		func(next http.Handler) http.Handler { return loggingMiddleware(options.Logger, next) },
 		func(next http.Handler) http.Handler { return recoveryMiddleware(options.Logger, next) },
 	), nil

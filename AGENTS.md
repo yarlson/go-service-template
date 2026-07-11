@@ -98,6 +98,8 @@ generated interface. Keep `/openapi.yaml` serving the exact canonical document.
   explicit. Do not start unbounded background work from request handlers.
 - Use `log/slog` structured fields. Preserve request IDs across request logs and
   problem responses.
+- Generate new persisted identifiers and server-generated request IDs as
+  UUIDv7. Preserve valid request IDs supplied by callers unchanged.
 - Avoid mutable package globals and implicit initialization side effects.
 - Comments describe current behavior, constraints, or non-obvious invariants.
   Do not narrate edit history or restate straightforward code.

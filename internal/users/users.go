@@ -43,8 +43,13 @@ func (s *Service) Create(ctx context.Context, email string) (User, error) {
 		return User{}, ErrInvalidEmail
 	}
 
+	userID, err := uuid.NewV7()
+	if err != nil {
+		return User{}, fmt.Errorf("generate user ID: %w", err)
+	}
+
 	user, err := s.repository.Create(ctx, User{
-		ID:    uuid.New(),
+		ID:    userID,
 		Email: normalizedEmail,
 	})
 	if err != nil {
