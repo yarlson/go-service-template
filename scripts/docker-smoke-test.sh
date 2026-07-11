@@ -49,6 +49,10 @@ created=$(curl --fail --silent -X POST http://127.0.0.1:18080/v1/users \
   -d '{"email":"smoke@example.com"}')
 user_id=$(printf '%s' "$created" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
 test -n "$user_id"
+case "$user_id" in
+  ????????-????-7???-????-????????????) ;;
+  *) echo "created user ID is not UUIDv7: $user_id" >&2; exit 1 ;;
+esac
 curl --fail --silent "http://127.0.0.1:18080/v1/users/$user_id" >/dev/null
 
 docker stop --time 5 "$container" >/dev/null

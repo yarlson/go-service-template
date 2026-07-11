@@ -94,6 +94,31 @@ func TestHandlerServesCanonicalContract(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "openapi: 3.0.3")
 }
 
+func TestHandlerRequestID(t *testing.T) {
+	t.Parallel()
+
+	handler := newTestHandler(t, &apiStub{}, httpserver.DisabledAuthentication(), pingerStub{})
+
+	t.Run("generates UUIDv7", func(t *testing.T) {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/livez", nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		requestID, err := uuid.Parse(response.Header().Get("X-Request-ID"))
+		require.NoError(t, err)
+		assert.Equal(t, uuid.Version(7), requestID.Version())
+	})
+
+	t.Run("preserves an incoming value", func(t *testing.T) {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/livez", nil)
+		request.Header.Set("X-Request-ID", "correlation-123")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		assert.Equal(t, "correlation-123", response.Header().Get("X-Request-ID"))
+	})
+}
+
 func newTestHandler(t *testing.T, api contractapi.StrictServerInterface, authentication httpserver.Authentication, pinger httpserver.Pinger) http.Handler {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
