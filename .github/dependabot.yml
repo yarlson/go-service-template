@@ -1,9 +1,12 @@
 version: 2
+# Cooldowns delay version updates only; security updates are unaffected.
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       go-dependencies:
         patterns: ["*"]
@@ -12,8 +15,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
