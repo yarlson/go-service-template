@@ -132,6 +132,7 @@ generic `controllers`, `services`, `repositories`, or `utils` trees.
 
 Logs are text locally and JSON elsewhere. Every response includes
 `X-Request-ID`; a valid incoming value is propagated, otherwise one is created.
+Set `LOG_LEVEL` to `debug`, `info`, `warn`, or `error`; the default is `info`.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to enable batched OTLP/HTTP traces. Empty means
 no exporter.
 
