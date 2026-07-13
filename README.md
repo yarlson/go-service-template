@@ -180,6 +180,15 @@ contains the SNS notification envelope, whose `Message` field contains the
 application event. Raw SNS delivery and CloudEvents are intentionally not used
 because sibling Node services consume the existing envelope directly.
 
+Envelope compatibility does not make example business schemas interchangeable.
+The `user.created` and `permissions.changed` messages in this template are
+illustrative feature contracts; a generated service must coordinate their
+names, payloads, ownership, and versioning with its real producers and consumers.
+In particular, existing Node services may require additional `user.created`
+fields, and the permissions snapshot protocol requires an upstream owner that
+provides a monotonic per-user revision. Do not connect same-named events until
+both sides accept the canonical schema.
+
 External publication uses the AWS default credential chain. Configure
 `AWS_REGION`, `USER_EVENTS_TOPIC_ARN`, and `PERMISSIONS_QUEUE_URL`;
 `AWS_ENDPOINT_URL` is available only for local development and tests and is
@@ -206,9 +215,28 @@ topology at runtime.
 
 `make test-integration` starts pinned PostgreSQL and LocalStack containers. The
 AWS test proves message-body filtering, the standard SNS wrapper, successful
-SQS acknowledgement, and DLQ redrive. LocalStack does not prove production IAM
-or cross-account topic policy, so release validation still requires an AWS
-sandbox round trip.
+SQS acknowledgement, and DLQ redrive. `make docker-test` additionally deploys
+the real CloudFormation template to pinned LocalStack and runs `migrate`, `api`,
+and `worker` from the same production image. It proves one outbound event, one
+committed-and-acknowledged inbound event, readiness, metrics, and graceful
+SIGTERM behavior.
+
+### AWS sandbox release check
+
+LocalStack does not prove IAM enforcement, workload identity, cross-account
+topic policy, managed encryption, or AWS filter-policy propagation. Before a
+service releases these messaging paths:
+
+1. Deploy `infra/aws-messaging.yaml` in a sandbox with the real upstream topic
+   ARN and acknowledge the IAM capability.
+2. Have the upstream owner permit the deployment account to subscribe when the
+   topic is cross-account, and attach the output worker policy to the runtime
+   role.
+3. Configure the worker from the stack's topic ARN and queue URL outputs, using
+   the default AWS credential chain, and verify readiness.
+4. Observe one agreed outbound event in a real subscriber and one agreed
+   inbound event committed and removed from SQS; verify the related metrics and
+   retain the stack outputs and logs as release evidence.
 
 ## Create a service from the template
 
