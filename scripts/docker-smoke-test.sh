@@ -48,7 +48,7 @@ docker run -d --name "$container" --network "$network" -p 18080:8080 \
   -e AUTH_MODE=disabled \
   -e DATABASE_URL="$database_url" \
   "$image" api >/dev/null
-docker run -d --name "$worker_container" --network "$network" --no-healthcheck \
+docker run -d --name "$worker_container" --network "$network" -p 18081:8080 \
   -e APP_ENV=development \
   -e DATABASE_URL="$database_url" \
   "$image" worker >/dev/null
@@ -62,11 +62,23 @@ until [ "$(docker inspect -f '{{.State.Health.Status}}' "$container")" = healthy
   fi
   sleep 1
 done
+attempt=0
+until [ "$(docker inspect -f '{{.State.Health.Status}}' "$worker_container")" = healthy ]; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 30 ]; then
+    echo "worker container did not become healthy" >&2
+    exit 1
+  fi
+  sleep 1
+done
 
 test "$(docker inspect -f '{{.Config.User}}' "$container")" = "nonroot:nonroot"
 curl --fail --silent http://127.0.0.1:18080/readyz >/dev/null
 curl --fail --silent http://127.0.0.1:18080/openapi.yaml | grep -q '^openapi: 3.0.3'
 curl --fail --silent http://127.0.0.1:18080/asyncapi.yaml | grep -q '^asyncapi: 3.0.0'
+curl --fail --silent http://127.0.0.1:18081/readyz >/dev/null
+worker_metrics=$(curl --fail --silent http://127.0.0.1:18081/metrics)
+printf '%s' "$worker_metrics" | grep -q 'service_database_available'
 created=$(curl --fail --silent -X POST http://127.0.0.1:18080/v1/users \
   -H 'Content-Type: application/json' \
   -d '{"email":"smoke@example.com"}')

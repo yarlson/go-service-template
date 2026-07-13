@@ -40,6 +40,8 @@ make worker
 configuration disables authentication; production configuration cannot do so.
 The test suite verifies that `.env.example` and the typed configuration remain
 in sync.
+`make worker` serves its operational endpoints on `:8081` locally so it can run
+beside the API; set `WORKER_HTTP_ADDRESS` to override that development port.
 
 Create and fetch a user:
 
@@ -81,13 +83,19 @@ revision in one transaction, then acknowledges the SQS message. Duplicate event
 IDs and stale revisions are successful no-ops; failed transactions are left for
 SQS redelivery.
 
-Runtime endpoints:
+API runtime endpoints:
 
 - `GET /livez` checks only that the process can serve HTTP.
 - `GET /readyz` performs a bounded PostgreSQL check.
 - `GET /openapi.yaml` returns the canonical API contract.
 - `GET /asyncapi.yaml` returns the canonical asynchronous message contract.
 - `GET /metrics` returns Prometheus metrics; restrict it at the network boundary.
+
+The worker exposes only `GET /livez`, `GET /readyz`, and `GET /metrics` on its
+own HTTP address. Worker readiness performs bounded PostgreSQL, permissions
+queue, and user-events topic checks. It remains unavailable until all enabled
+dependencies and processing loops have started, and turns unavailable before
+shutdown drain begins.
 
 ## Commands
 
@@ -98,7 +106,7 @@ make worker             run durable background jobs
 make migrate            apply pending migrations
 make generate           regenerate OpenAPI and SQL code
 make test               run unit tests
-make test-integration   run integration tests in an isolated PostgreSQL container
+make test-integration   run integration tests in isolated PostgreSQL and AWS containers
 make check              run the full verification suite
 make build              build bin/service
 make docker-test        smoke-test the production image
@@ -179,6 +187,12 @@ rejected in production. With no topic or queue in development, the matching
 external event path is disabled while the private `users` queue continues to
 run. The worker consumes in batches of up to ten with bounded concurrency and
 deletes a message only after its database transaction commits.
+It renews each 120-second SQS visibility lease every 30 seconds while handling;
+a renewal failure cancels the handler and suppresses acknowledgement. Transient
+polling failures back off and recover, while three repeated authentication or
+missing-resource failures stop the worker. On shutdown, intake stops first and
+SQS handlers keep their leases while SQS and River drain within the shared
+`SHUTDOWN_TIMEOUT`.
 
 [`infra/aws-messaging.yaml`](infra/aws-messaging.yaml) is the deployer-owned
 CloudFormation recipe. It creates the outbound user-events topic and the
@@ -216,7 +230,10 @@ Logs are text locally and JSON elsewhere. Every response includes
 Set `LOG_LEVEL` to `debug`, `info`, `warn`, or `error`; the default is `info`.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to enable batched OTLP/HTTP traces. Empty means
 no trace exporter. Prometheus HTTP and Go runtime metrics are always available
-at `/metrics`, including PostgreSQL readiness availability and check duration.
+at `/metrics`, including dependency availability, messaging publish/process
+duration, queue age and attempts, outcomes and failures, in-flight work, and
+approximate SQS backlog. AWS SDK calls and consumer attempts emit spans. Labels
+are deliberately low-cardinality and event/job payloads are never logged.
 
 The production image runs as a non-root distroless user and embeds migrations.
 Run the same image with `migrate` before rolling out separate `api` and `worker`

@@ -16,10 +16,11 @@ type PermissionApplier interface {
 
 type PermissionHandler struct {
 	permissions PermissionApplier
+	observe     func(context.Context, users.PermissionChangeResult)
 }
 
-func NewPermissionHandler(permissions PermissionApplier) *PermissionHandler {
-	return &PermissionHandler{permissions: permissions}
+func NewPermissionHandler(permissions PermissionApplier, observe func(context.Context, users.PermissionChangeResult)) *PermissionHandler {
+	return &PermissionHandler{permissions: permissions, observe: observe}
 }
 
 type permissionsChangedPayload struct {
@@ -34,11 +35,15 @@ func (h *PermissionHandler) Handle(ctx context.Context, body []byte) error {
 		return fmt.Errorf("decode permissions.changed: %w", err)
 	}
 	ctx = messaging.WithCorrelationID(ctx, event.Metadata.CorrelationID)
-	if _, err := h.permissions.Apply(ctx, users.PermissionChange{
+	result, err := h.permissions.Apply(ctx, users.PermissionChange{
 		EventID: event.ID, UserID: event.Payload.UserID,
 		Revision: event.Payload.Revision, Permissions: event.Payload.Permissions,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("handle permissions.changed: %w", err)
+	}
+	if h.observe != nil {
+		h.observe(ctx, result)
 	}
 	return nil
 }

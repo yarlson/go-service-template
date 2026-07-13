@@ -66,6 +66,14 @@ func NewReadiness(pinger Pinger, observer ReadinessObserver) *Readiness {
 	return readiness
 }
 
+func NewPausedReadiness(pinger Pinger, observer ReadinessObserver) *Readiness {
+	return &Readiness{pinger: pinger, observer: observer}
+}
+
+func (r *Readiness) StartAccepting() {
+	r.accepting.Store(true)
+}
+
 func (r *Readiness) StopAccepting() {
 	r.accepting.Store(false)
 }
@@ -78,6 +86,31 @@ type HandlerOptions struct {
 	Metrics   http.Handler
 	Version   string
 	Commit    string
+}
+
+type OperationsHandlerOptions struct {
+	Logger    *slog.Logger
+	Readiness *Readiness
+	Metrics   http.Handler
+	Version   string
+	Commit    string
+}
+
+func NewOperationsHandler(options OperationsHandlerOptions) (http.Handler, error) {
+	if options.Logger == nil || options.Readiness == nil || options.Readiness.pinger == nil || options.Metrics == nil {
+		return nil, errors.New("logger, readiness, and metrics are required")
+	}
+
+	router := http.NewServeMux()
+	router.HandleFunc("GET /livez", healthHandler(http.StatusOK, options.Version, options.Commit))
+	router.HandleFunc("GET /readyz", readinessHandler(options.Readiness, options.Version, options.Commit))
+	router.Handle("GET /metrics", options.Metrics)
+	return chain(
+		router,
+		func(next http.Handler) http.Handler { return requestIDMiddleware(options.Logger, next) },
+		func(next http.Handler) http.Handler { return loggingMiddleware(options.Logger, next) },
+		func(next http.Handler) http.Handler { return recoveryMiddleware(options.Logger, next) },
+	), nil
 }
 
 func NewHandler(options HandlerOptions) (http.Handler, error) {

@@ -84,6 +84,7 @@ func TestLoadWorkerDoesNotRequireAPIConfiguration(t *testing.T) {
 	cfg, err := LoadWorker()
 	require.NoError(t, err)
 	assert.Equal(t, EnvironmentProduction, cfg.Environment)
+	assert.Equal(t, ":8080", cfg.HTTPAddress)
 }
 
 func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
@@ -93,6 +94,7 @@ func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
 		Environment:      EnvironmentProduction,
 		ServiceName:      "test-service",
 		LogLevel:         LogLevelInfo,
+		HTTPAddress:      ":8080",
 		DatabaseURL:      "postgres://user:pass@localhost:5432/service?sslmode=disable",
 		ShutdownTimeout:  10 * time.Second,
 		AWSRegion:        "eu-west-1",
@@ -112,6 +114,10 @@ func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
 	missingQueue := valid
 	missingQueue.PermissionsQueue = ""
 	require.Error(t, missingQueue.Validate())
+
+	invalidAddress := valid
+	invalidAddress.HTTPAddress = "8080"
+	require.Error(t, invalidAddress.Validate())
 }
 
 func TestEnvironmentExampleMatchesConfig(t *testing.T) {

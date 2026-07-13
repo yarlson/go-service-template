@@ -29,7 +29,7 @@ func TestSNSAndSQSTopologyIntegration(t *testing.T) {
 	snsClient := sns.NewFromConfig(awsConfig)
 	sqsClient := sqs.NewFromConfig(awsConfig)
 	topology := createTestTopology(t, snsClient, sqsClient, "redrive")
-	publisher := NewSNSTopicPublisher(snsClient, topology.topicARN)
+	publisher := NewSNSTopicPublisher(snsClient, topology.topicARN, nil)
 
 	require.NoError(t, publisher.Publish(t.Context(), []byte(`{"type":"unrelated.event"}`)))
 	want := Envelope[map[string]any]{
@@ -66,12 +66,12 @@ func TestSNSAndSQSTopologyIntegration(t *testing.T) {
 	assert.Empty(t, filtered.Messages, "the unrelated event must be filtered out")
 
 	acknowledgementTopology := createTestTopology(t, snsClient, sqsClient, "ack")
-	acknowledgementPublisher := NewSNSTopicPublisher(snsClient, acknowledgementTopology.topicARN)
+	acknowledgementPublisher := NewSNSTopicPublisher(snsClient, acknowledgementTopology.topicARN, nil)
 	require.NoError(t, acknowledgementPublisher.Publish(t.Context(), message))
 	ctx, cancel := context.WithCancel(t.Context())
 	client := &cancelAfterDeleteClient{Client: sqsClient, cancel: cancel}
 	handler := &capturingHandler{body: make(chan []byte, 1)}
-	require.NoError(t, NewSQSConsumer(client, acknowledgementTopology.queueURL, handler, discardLogger()).Run(ctx))
+	require.NoError(t, NewSQSConsumer(client, acknowledgementTopology.queueURL, handler, discardLogger(), nil).Run(ctx))
 
 	gotBody := <-handler.body
 	got, err = DecodeSNSNotification[map[string]any](gotBody, "permissions.changed")

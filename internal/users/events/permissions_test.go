@@ -27,12 +27,16 @@ func TestPermissionHandlerDecodesStandardSNSMessage(t *testing.T) {
 	require.NoError(t, err)
 	body := []byte(fmt.Sprintf(`{"Type":"Notification","Message":%q}`, envelope))
 	applier := &permissionApplierStub{}
-	require.NoError(t, NewPermissionHandler(applier).Handle(t.Context(), body))
+	var observed users.PermissionChangeResult
+	require.NoError(t, NewPermissionHandler(applier, func(_ context.Context, result users.PermissionChangeResult) {
+		observed = result
+	}).Handle(t.Context(), body))
 	assert.Equal(t, "event-1", applier.change.EventID)
 	assert.Equal(t, userID, applier.change.UserID)
 	assert.Equal(t, int64(3), applier.change.Revision)
 	assert.Equal(t, []string{"read"}, applier.change.Permissions)
 	assert.Equal(t, "correlation-1", applier.correlationID)
+	assert.Equal(t, users.PermissionChangeApplied, observed)
 }
 
 type permissionApplierStub struct {
