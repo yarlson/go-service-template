@@ -59,6 +59,7 @@ done
 test "$(docker inspect -f '{{.Config.User}}' "$container")" = "nonroot:nonroot"
 curl --fail --silent http://127.0.0.1:18080/readyz >/dev/null
 curl --fail --silent http://127.0.0.1:18080/openapi.yaml | grep -q '^openapi: 3.0.3'
+curl --fail --silent http://127.0.0.1:18080/asyncapi.yaml | grep -q '^asyncapi: 3.0.0'
 created=$(curl --fail --silent -X POST http://127.0.0.1:18080/v1/users \
   -H 'Content-Type: application/json' \
   -d '{"email":"smoke@example.com"}')

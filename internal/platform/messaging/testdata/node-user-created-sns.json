@@ -1,0 +1,11 @@
+{
+  "Type": "Notification",
+  "MessageId": "85ce9883-22c1-5d56-8fbc-1d3d92e62545",
+  "TopicArn": "arn:aws:sns:eu-central-1:000000000000:user-events",
+  "Message": "{\"id\":\"0197f7cc-f2aa-7a9e-95b1-44e127a2b42e\",\"timestamp\":\"2026-07-13T07:00:00Z\",\"type\":\"user.created\",\"payload\":{\"userId\":\"0197f7cc-e983-73a0-bb95-e0fbab2fc0be\",\"name\":\"Example User\",\"email\":\"person@example.com\"},\"metadata\":{\"schemaVersion\":\"1.0.0\",\"producedBy\":\"node-service-template\",\"originatedFrom\":\"node-service-template\",\"correlationId\":\"0197f7cc-dff1-7398-ab7e-8dc243c5fc82\"},\"deduplicationId\":null,\"deduplicationOptions\":null}",
+  "Timestamp": "2026-07-13T07:00:01Z",
+  "SignatureVersion": "1",
+  "Signature": "test-signature",
+  "SigningCertURL": "https://sns.eu-central-1.amazonaws.com/test.pem",
+  "UnsubscribeURL": "https://sns.eu-central-1.amazonaws.com/unsubscribe"
+}

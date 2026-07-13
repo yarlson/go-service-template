@@ -126,6 +126,10 @@ func NewHandler(options HandlerOptions) (http.Handler, error) {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(contract.OpenAPI)
 	})
+	root.HandleFunc("GET /asyncapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(contract.AsyncAPI)
+	})
 
 	return chain(
 		root,
