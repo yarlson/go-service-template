@@ -61,6 +61,7 @@ generated code, SQL adapters, or `cmd/service`.
 The canonical inputs are:
 
 - `api/openapi.yaml` for the HTTP contract.
+- `api/asyncapi.yaml` for asynchronous message contracts.
 - `db/migrations/*.sql` for schema history.
 - `internal/<feature>/postgres/queries.sql` for feature queries.
 - `.env.example` for documented runtime configuration.
@@ -81,6 +82,8 @@ run `make generate`. Generated output must be reproducible;
 
 Make API changes contract-first: update OpenAPI, regenerate, then implement the
 generated interface. Keep `/openapi.yaml` serving the exact canonical document.
+Keep `/asyncapi.yaml` serving the exact canonical asynchronous document and run
+`make asyncapi-check` after changing it.
 
 ## Go practices
 

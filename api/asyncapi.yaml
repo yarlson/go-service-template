@@ -1,0 +1,198 @@
+asyncapi: 3.0.0
+info:
+  title: Go Service Template Events
+  version: 1.0.0
+  description: |
+    Asynchronous messages produced and consumed by the service. Messages use
+    the Lokalise Message Queue Toolkit envelope and are delivered from SNS to
+    SQS with raw message delivery disabled.
+defaultContentType: application/json
+channels:
+  userEvents:
+    address: go-service-template-user
+    description: User lifecycle events owned by this service.
+    bindings:
+      sns:
+        name: go-service-template-user
+        ordering:
+          type: standard
+        bindingVersion: 0.1.0
+    messages:
+      userCreated:
+        $ref: '#/components/messages/userCreated'
+  permissionEvents:
+    address: permissions
+    description: Permission events produced by the upstream permissions service.
+    bindings:
+      sns:
+        name: permissions
+        ordering:
+          type: standard
+        bindingVersion: 0.1.0
+    messages:
+      permissionsChanged:
+        $ref: '#/components/messages/permissionsChanged'
+operations:
+  publishUserCreated:
+    action: send
+    channel:
+      $ref: '#/channels/userEvents'
+    messages:
+      - $ref: '#/channels/userEvents/messages/userCreated'
+  consumePermissionsChanged:
+    action: receive
+    channel:
+      $ref: '#/channels/permissionEvents'
+    messages:
+      - $ref: '#/channels/permissionEvents/messages/permissionsChanged'
+    bindings:
+      sns:
+        consumers:
+          - protocol: sqs
+            endpoint:
+              name: go-service-template-permission
+            filterPolicyScope: MessageBody
+            filterPolicy:
+              type:
+                - permissions.changed
+            rawMessageDelivery: false
+        bindingVersion: 0.1.0
+components:
+  messages:
+    userCreated:
+      name: user.created
+      title: User created
+      summary: A user was created by this service.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/userCreatedEnvelope'
+    permissionsChanged:
+      name: permissions.changed
+      title: Permissions changed
+      summary: The complete permission set for a user changed.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/permissionsChangedEnvelope'
+  schemas:
+    messageMetadata:
+      type: object
+      required:
+        - schemaVersion
+        - producedBy
+        - originatedFrom
+        - correlationId
+      properties:
+        schemaVersion:
+          type: string
+          minLength: 1
+        producedBy:
+          type: string
+          minLength: 1
+        originatedFrom:
+          type: string
+          minLength: 1
+        correlationId:
+          type: string
+          minLength: 1
+    deduplicationOptions:
+      type: object
+      properties:
+        deduplicationWindowSeconds:
+          type: integer
+          minimum: 1
+        lockTimeoutSeconds:
+          type: integer
+          minimum: 1
+        acquireTimeoutSeconds:
+          type: integer
+          minimum: 1
+        refreshIntervalSeconds:
+          type: number
+          exclusiveMinimum: 0
+    userCreatedEnvelope:
+      type: object
+      required:
+        - id
+        - timestamp
+        - type
+        - payload
+        - metadata
+      properties:
+        id:
+          type: string
+          minLength: 1
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: user.created
+        payload:
+          $ref: '#/components/schemas/userCreatedPayload'
+        metadata:
+          $ref: '#/components/schemas/messageMetadata'
+        deduplicationId:
+          type:
+            - string
+            - 'null'
+        deduplicationOptions:
+          oneOf:
+            - $ref: '#/components/schemas/deduplicationOptions'
+            - type: 'null'
+    userCreatedPayload:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          format: uuid
+    permissionsChangedEnvelope:
+      type: object
+      required:
+        - id
+        - timestamp
+        - type
+        - payload
+        - metadata
+      properties:
+        id:
+          type: string
+          minLength: 1
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          const: permissions.changed
+        payload:
+          $ref: '#/components/schemas/permissionsChangedPayload'
+        metadata:
+          $ref: '#/components/schemas/messageMetadata'
+        deduplicationId:
+          type:
+            - string
+            - 'null'
+        deduplicationOptions:
+          oneOf:
+            - $ref: '#/components/schemas/deduplicationOptions'
+            - type: 'null'
+    permissionsChangedPayload:
+      type: object
+      required:
+        - userId
+        - revision
+        - permissions
+      properties:
+        userId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contract "github.com/your-org/go-service-template/api"
 	contractapi "github.com/your-org/go-service-template/internal/api"
 	"github.com/your-org/go-service-template/internal/platform/httpserver"
 )
@@ -86,12 +87,18 @@ func TestHandlerServesCanonicalContract(t *testing.T) {
 	t.Parallel()
 
 	handler := newTestHandler(t, &apiStub{}, httpserver.DisabledAuthentication(), pingerStub{})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/openapi.yaml", nil)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
+	for path, want := range map[string][]byte{
+		"/openapi.yaml":  contract.OpenAPI,
+		"/asyncapi.yaml": contract.AsyncAPI,
+	} {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
 
-	assert.Equal(t, http.StatusOK, response.Code)
-	assert.Contains(t, response.Body.String(), "openapi: 3.0.3")
+		assert.Equal(t, http.StatusOK, response.Code, "GET %s", path)
+		assert.Equal(t, "application/yaml", response.Header().Get("Content-Type"), "GET %s", path)
+		assert.Equal(t, string(want), response.Body.String(), "GET %s", path)
+	}
 }
 
 func TestHandlerServesMetrics(t *testing.T) {

@@ -6,10 +6,11 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 SOURCE_URL ?= https://github.com/yarlson/go-service-template
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
+ASYNCAPI_CLI_IMAGE := asyncapi/cli:5.0.7@sha256:b861d57b05dc1afeb8ddd52efe0acd8313367938c2ca86f55a9a26428af4f1d2
 
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev migrate generate generate-check fmt fmt-check lint test test-race test-integration check build docker-build docker-test compose-up compose-down clean rename
+.PHONY: help bootstrap dev migrate generate generate-check asyncapi-check fmt fmt-check lint test test-race test-integration check build docker-build docker-test compose-up compose-down clean rename
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -30,10 +31,16 @@ generate: ## Regenerate OpenAPI and database code
 	go tool sqlc generate
 
 generate-check: ## Fail when generated code is stale
-	@before=$$(cksum internal/api/api.gen.go internal/users/postgres/db.go internal/users/postgres/models.go internal/users/postgres/queries.sql.go); \
+	@set -e; \
+	before=$$(cksum internal/api/api.gen.go internal/users/postgres/db.go internal/users/postgres/models.go internal/users/postgres/queries.sql.go); \
 	$(MAKE) --no-print-directory generate; \
 	after=$$(cksum internal/api/api.gen.go internal/users/postgres/db.go internal/users/postgres/models.go internal/users/postgres/queries.sql.go); \
 	test "$$before" = "$$after" || (echo 'generated code is stale; run make generate' >&2; exit 1)
+
+asyncapi-check: ## Validate the asynchronous message contract
+	docker run --rm --network none --entrypoint /bin/sh \
+		-v '$(CURDIR):/app:ro' -w /app '$(ASYNCAPI_CLI_IMAGE)' -c \
+		'printf '\''%s\n'\'' '\''{"analyticsEnabled":"false","infoMessageShown":"true","userID":"local"}'\'' > /tmp/asyncapi-analytics && ASYNCAPI_METRICS_CONFIG_PATH=/tmp/asyncapi-analytics SUPPRESS_NO_CONFIG_WARNING=true /usr/local/bin/asyncapi validate api/asyncapi.yaml'
 
 fmt: ## Format Go source
 	go tool golangci-lint fmt
@@ -53,7 +60,7 @@ test-race: ## Run unit tests with the race detector
 test-integration: ## Run tests against isolated PostgreSQL containers
 	go test -count=1 -tags=integration ./internal/users/postgres
 
-check: generate-check fmt-check lint test test-race test-integration ## Run the complete local verification suite
+check: asyncapi-check generate-check fmt-check lint test test-race test-integration ## Run the complete local verification suite
 	go mod tidy -diff
 	go mod verify
 	go tool govulncheck ./...
