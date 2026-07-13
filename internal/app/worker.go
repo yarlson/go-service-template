@@ -66,10 +66,11 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 		logger.Warn("external event publication disabled", "reason", "USER_EVENTS_TOPIC_ARN is empty")
 	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Logger:       logger,
-		Queues:       queues,
-		PeriodicJobs: []*river.PeriodicJob{usersjobs.PeriodicCleanup()},
-		Workers:      workers,
+		Logger:              logger,
+		Queues:              queues,
+		PeriodicJobs:        []*river.PeriodicJob{usersjobs.PeriodicCleanup()},
+		SkipUnknownJobCheck: eventPublisher == nil,
+		Workers:             workers,
 	})
 	if err != nil {
 		return fmt.Errorf("create River worker client: %w", err)
