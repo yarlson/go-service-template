@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyUserPermissions = `-- name: ApplyUserPermissions :one
+INSERT INTO user_permissions (user_id, revision, permissions)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) DO UPDATE
+SET
+    revision = EXCLUDED.revision,
+    permissions = EXCLUDED.permissions,
+    updated_at = now()
+WHERE user_permissions.revision < EXCLUDED.revision
+RETURNING user_id
+`
+
+type ApplyUserPermissionsParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	Revision    int64     `json:"revision"`
+	Permissions []string  `json:"permissions"`
+}
+
+func (q *Queries) ApplyUserPermissions(ctx context.Context, arg ApplyUserPermissionsParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, applyUserPermissions, arg.UserID, arg.Revision, arg.Permissions)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const completeUserImportEntry = `-- name: CompleteUserImportEntry :exec
 UPDATE user_import_entries
 SET state = 'completed'
@@ -224,6 +249,24 @@ func (q *Queries) GetUserImport(ctx context.Context, id uuid.UUID) (UserImport, 
 	return i, err
 }
 
+const getUserPermissions = `-- name: GetUserPermissions :one
+SELECT user_id, revision, permissions, updated_at
+FROM user_permissions
+WHERE user_id = $1
+`
+
+func (q *Queries) GetUserPermissions(ctx context.Context, userID uuid.UUID) (UserPermission, error) {
+	row := q.db.QueryRow(ctx, getUserPermissions, userID)
+	var i UserPermission
+	err := row.Scan(
+		&i.UserID,
+		&i.Revision,
+		&i.Permissions,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listPendingUserImportEntries = `-- name: ListPendingUserImportEntries :many
 SELECT entries.import_id, entries.user_id, entries.email, entries.state, imports.correlation_id
 FROM user_import_entries AS entries
@@ -264,6 +307,25 @@ func (q *Queries) ListPendingUserImportEntries(ctx context.Context, importID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordProcessedEvent = `-- name: RecordProcessedEvent :one
+INSERT INTO processed_events (event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING event_id
+`
+
+type RecordProcessedEventParams struct {
+	EventID   string `json:"event_id"`
+	EventType string `json:"event_type"`
+}
+
+func (q *Queries) RecordProcessedEvent(ctx context.Context, arg RecordProcessedEventParams) (string, error) {
+	row := q.db.QueryRow(ctx, recordProcessedEvent, arg.EventID, arg.EventType)
+	var event_id string
+	err := row.Scan(&event_id)
+	return event_id, err
 }
 
 const startUserImport = `-- name: StartUserImport :one

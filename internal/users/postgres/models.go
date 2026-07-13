@@ -100,6 +100,12 @@ func (ns NullUserImportState) Value() (driver.Value, error) {
 	return string(ns.UserImportState), nil
 }
 
+type ProcessedEvent struct {
+	EventID     string    `json:"event_id"`
+	EventType   string    `json:"event_type"`
+	ProcessedAt time.Time `json:"processed_at"`
+}
+
 type User struct {
 	ID        uuid.UUID `json:"id"`
 	Email     string    `json:"email"`
@@ -123,4 +129,11 @@ type UserImportEntry struct {
 	UserID   uuid.UUID            `json:"user_id"`
 	Email    string               `json:"email"`
 	State    UserImportEntryState `json:"state"`
+}
+
+type UserPermission struct {
+	UserID      uuid.UUID `json:"user_id"`
+	Revision    int64     `json:"revision"`
+	Permissions []string  `json:"permissions"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

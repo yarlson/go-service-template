@@ -77,3 +77,25 @@ RETURNING user_imports.*;
 -- name: DeleteFinishedUserImportsBefore :execrows
 DELETE FROM user_imports
 WHERE state IN ('completed', 'failed') AND finished_at < $1;
+
+-- name: RecordProcessedEvent :one
+INSERT INTO processed_events (event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING event_id;
+
+-- name: ApplyUserPermissions :one
+INSERT INTO user_permissions (user_id, revision, permissions)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) DO UPDATE
+SET
+    revision = EXCLUDED.revision,
+    permissions = EXCLUDED.permissions,
+    updated_at = now()
+WHERE user_permissions.revision < EXCLUDED.revision
+RETURNING user_id;
+
+-- name: GetUserPermissions :one
+SELECT user_id, revision, permissions, updated_at
+FROM user_permissions
+WHERE user_id = $1;

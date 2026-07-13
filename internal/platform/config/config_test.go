@@ -79,6 +79,7 @@ func TestLoadWorkerDoesNotRequireAPIConfiguration(t *testing.T) {
 	t.Setenv("OIDC_ISSUER_URL", "")
 	t.Setenv("OIDC_AUDIENCE", "")
 	t.Setenv("USER_EVENTS_TOPIC_ARN", "arn:aws:sns:eu-west-1:123456789012:user-events")
+	t.Setenv("PERMISSIONS_QUEUE_URL", "https://sqs.eu-west-1.amazonaws.com/123456789012/permissions")
 
 	cfg, err := LoadWorker()
 	require.NoError(t, err)
@@ -89,13 +90,14 @@ func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
 	t.Parallel()
 
 	valid := WorkerConfig{
-		Environment:     EnvironmentProduction,
-		ServiceName:     "test-service",
-		LogLevel:        LogLevelInfo,
-		DatabaseURL:     "postgres://user:pass@localhost:5432/service?sslmode=disable",
-		ShutdownTimeout: 10 * time.Second,
-		AWSRegion:       "eu-west-1",
-		UserEventsTopic: "arn:aws:sns:eu-west-1:123456789012:user-events",
+		Environment:      EnvironmentProduction,
+		ServiceName:      "test-service",
+		LogLevel:         LogLevelInfo,
+		DatabaseURL:      "postgres://user:pass@localhost:5432/service?sslmode=disable",
+		ShutdownTimeout:  10 * time.Second,
+		AWSRegion:        "eu-west-1",
+		UserEventsTopic:  "arn:aws:sns:eu-west-1:123456789012:user-events",
+		PermissionsQueue: "https://sqs.eu-west-1.amazonaws.com/123456789012/permissions",
 	}
 	require.NoError(t, valid.Validate())
 
@@ -106,6 +108,10 @@ func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
 	customEndpoint := valid
 	customEndpoint.AWSEndpointURL = "http://localstack:4566"
 	require.Error(t, customEndpoint.Validate())
+
+	missingQueue := valid
+	missingQueue.PermissionsQueue = ""
+	require.Error(t, missingQueue.Validate())
 }
 
 func TestEnvironmentExampleMatchesConfig(t *testing.T) {
