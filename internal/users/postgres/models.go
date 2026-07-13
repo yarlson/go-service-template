@@ -115,6 +115,7 @@ type UserImport struct {
 	CreatedAt      time.Time          `json:"created_at"`
 	StartedAt      pgtype.Timestamptz `json:"started_at"`
 	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+	CorrelationID  string             `json:"correlation_id"`
 }
 
 type UserImportEntry struct {

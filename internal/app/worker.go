@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/your-org/go-service-template/internal/platform/config"
+	"github.com/your-org/go-service-template/internal/platform/messaging"
 	"github.com/your-org/go-service-template/internal/platform/telemetry"
 	"github.com/your-org/go-service-template/internal/users"
 	usersjobs "github.com/your-org/go-service-template/internal/users/jobs"
@@ -44,13 +47,30 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 	}
 
 	workers := river.NewWorkers()
+	queues := map[string]river.QueueConfig{
+		usersjobs.QueueUsers: {MaxWorkers: 5},
+	}
+	var eventPublisher *messaging.SNSTopicPublisher
+	if cfg.UserEventsTopic != "" {
+		loadOptions := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(cfg.AWSRegion)}
+		if cfg.AWSEndpointURL != "" {
+			loadOptions = append(loadOptions, awsconfig.WithBaseEndpoint(cfg.AWSEndpointURL))
+		}
+		awsConfig, err := awsconfig.LoadDefaultConfig(startupCtx, loadOptions...)
+		if err != nil {
+			return fmt.Errorf("load AWS configuration: %w", err)
+		}
+		eventPublisher = messaging.NewSNSTopicPublisher(sns.NewFromConfig(awsConfig), cfg.UserEventsTopic)
+		queues[usersjobs.QueueEvents] = river.QueueConfig{MaxWorkers: 10}
+	} else {
+		logger.Warn("external event publication disabled", "reason", "USER_EVENTS_TOPIC_ARN is empty")
+	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Logger: logger,
-		Queues: map[string]river.QueueConfig{
-			usersjobs.QueueUsers: {MaxWorkers: 5},
-		},
-		PeriodicJobs: []*river.PeriodicJob{usersjobs.PeriodicCleanup()},
-		Workers:      workers,
+		Logger:              logger,
+		Queues:              queues,
+		PeriodicJobs:        []*river.PeriodicJob{usersjobs.PeriodicCleanup()},
+		SkipUnknownJobCheck: eventPublisher == nil,
+		Workers:             workers,
 	})
 	if err != nil {
 		return fmt.Errorf("create River worker client: %w", err)
@@ -60,6 +80,9 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 	importService := users.NewImportService(importRepository)
 	river.AddWorker(workers, usersjobs.NewImportWorker(importService))
 	river.AddWorker(workers, usersjobs.NewCleanupImportsWorker(logger, importService))
+	if eventPublisher != nil {
+		river.AddWorker(workers, usersjobs.NewPublishCreatedWorker(eventPublisher, cfg.ServiceName))
+	}
 
 	workerCtx, cancelWorker := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelWorker()

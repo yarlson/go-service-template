@@ -78,10 +78,34 @@ func TestLoadWorkerDoesNotRequireAPIConfiguration(t *testing.T) {
 	t.Setenv("AUTH_MODE", "")
 	t.Setenv("OIDC_ISSUER_URL", "")
 	t.Setenv("OIDC_AUDIENCE", "")
+	t.Setenv("USER_EVENTS_TOPIC_ARN", "arn:aws:sns:eu-west-1:123456789012:user-events")
 
 	cfg, err := LoadWorker()
 	require.NoError(t, err)
 	assert.Equal(t, EnvironmentProduction, cfg.Environment)
+}
+
+func TestWorkerProductionRequiresAWSConfiguration(t *testing.T) {
+	t.Parallel()
+
+	valid := WorkerConfig{
+		Environment:     EnvironmentProduction,
+		ServiceName:     "test-service",
+		LogLevel:        LogLevelInfo,
+		DatabaseURL:     "postgres://user:pass@localhost:5432/service?sslmode=disable",
+		ShutdownTimeout: 10 * time.Second,
+		AWSRegion:       "eu-west-1",
+		UserEventsTopic: "arn:aws:sns:eu-west-1:123456789012:user-events",
+	}
+	require.NoError(t, valid.Validate())
+
+	missingTopic := valid
+	missingTopic.UserEventsTopic = ""
+	require.Error(t, missingTopic.Validate())
+
+	customEndpoint := valid
+	customEndpoint.AWSEndpointURL = "http://localstack:4566"
+	require.Error(t, customEndpoint.Validate())
 }
 
 func TestEnvironmentExampleMatchesConfig(t *testing.T) {
@@ -117,14 +141,15 @@ func configEnvironmentVariables(t *testing.T) map[string]struct{} {
 	t.Helper()
 
 	variables := make(map[string]struct{})
-	configType := reflect.TypeFor[Config]()
-	for index := range configType.NumField() {
-		field := configType.Field(index)
-		tag := field.Tag.Get("env")
-		require.NotEmpty(t, tag, "Config.%s must declare an env tag", field.Name)
-		name, _, _ := strings.Cut(tag, ",")
-		require.NotEmpty(t, name, "Config.%s has an empty env tag", field.Name)
-		variables[name] = struct{}{}
+	for _, configType := range []reflect.Type{reflect.TypeFor[Config](), reflect.TypeFor[WorkerConfig]()} {
+		for index := range configType.NumField() {
+			field := configType.Field(index)
+			tag := field.Tag.Get("env")
+			require.NotEmpty(t, tag, "%s.%s must declare an env tag", configType.Name(), field.Name)
+			name, _, _ := strings.Cut(tag, ",")
+			require.NotEmpty(t, name, "%s.%s has an empty env tag", configType.Name(), field.Name)
+			variables[name] = struct{}{}
+		}
 	}
 
 	return variables

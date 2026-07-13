@@ -93,8 +93,20 @@ while :; do
   fi
   sleep 1
 done
+attempt=0
+while :; do
+  completed_jobs=$(docker run --rm --network "$network" -e DATABASE_URL="$database_url" "$image" \
+    jobs list --queue users --state completed --limit 10)
+  printf '%s' "$completed_jobs" | grep -q '"kind":"users.import"' && break
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 10 ]; then
+    echo "user import job did not finalize: $completed_jobs" >&2
+    exit 1
+  fi
+  sleep 1
+done
 docker run --rm --network "$network" -e DATABASE_URL="$database_url" "$image" \
-  jobs list --queue users --state completed --limit 10 | grep -q '"kind":"users.import"'
+  jobs list --queue events --state available --limit 10 | grep -q '"kind":"users.publish-created"'
 metrics=$(curl --fail --silent http://127.0.0.1:18080/metrics)
 printf '%s' "$metrics" | grep -q 'http_server_request_duration_seconds'
 printf '%s' "$metrics" | grep -Eq '^service_database_available(\{[^}]*\})? 1$'

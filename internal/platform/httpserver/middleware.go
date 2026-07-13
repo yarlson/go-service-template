@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/your-org/go-service-template/internal/platform/messaging"
 )
 
 type requestIDKey struct{}
@@ -29,6 +31,7 @@ func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 
 		w.Header().Set("X-Request-ID", requestID)
 		ctx := context.WithValue(r.Context(), requestIDKey{}, requestID)
+		ctx = messaging.WithCorrelationID(ctx, requestID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

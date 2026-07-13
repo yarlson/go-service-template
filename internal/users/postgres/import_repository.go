@@ -11,11 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/your-org/go-service-template/internal/platform/messaging"
 	"github.com/your-org/go-service-template/internal/users"
 )
 
 type ImportJobEnqueuer interface {
 	EnqueueImport(context.Context, pgx.Tx, uuid.UUID) error
+	EnqueueUserCreated(context.Context, pgx.Tx, uuid.UUID, string) error
 }
 
 type ImportRepository struct {
@@ -36,8 +38,9 @@ func (r *ImportRepository) CreateImport(ctx context.Context, userImport users.Im
 
 	queries := New(tx)
 	created, err := queries.CreateUserImport(ctx, CreateUserImportParams{
-		ID:         userImport.ID,
-		TotalCount: int32(userImport.TotalCount),
+		ID:            userImport.ID,
+		TotalCount:    int32(userImport.TotalCount),
+		CorrelationID: correlationID(ctx, userImport.ID.String()),
 	})
 	if err != nil {
 		return users.Import{}, fmt.Errorf("insert user import: %w", err)
@@ -113,6 +116,9 @@ func (r *ImportRepository) ProcessImport(ctx context.Context, id uuid.UUID) erro
 			if err := transactionQueries.CompleteUserImportEntry(ctx, CompleteUserImportEntryParams{ImportID: id, UserID: entry.UserID}); err != nil {
 				return fmt.Errorf("complete user import entry: %w", err)
 			}
+			if err := r.enqueuer.EnqueueUserCreated(ctx, tx, entry.UserID, entry.CorrelationID); err != nil {
+				return fmt.Errorf("enqueue imported user.created: %w", err)
+			}
 			continue
 		}
 		if !errors.Is(createErr, pgx.ErrNoRows) {
@@ -141,6 +147,13 @@ func (r *ImportRepository) ProcessImport(ctx context.Context, id uuid.UUID) erro
 		return fmt.Errorf("commit import processing: %w", err)
 	}
 	return nil
+}
+
+func correlationID(ctx context.Context, fallback string) string {
+	if correlationID := messaging.CorrelationID(ctx); correlationID != "" {
+		return correlationID
+	}
+	return fallback
 }
 
 func (r *ImportRepository) DeleteFinishedImportsBefore(ctx context.Context, cutoff time.Time) (int64, error) {

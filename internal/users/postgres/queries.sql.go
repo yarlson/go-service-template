@@ -66,18 +66,19 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const createUserImport = `-- name: CreateUserImport :one
-INSERT INTO user_imports (id, total_count)
-VALUES ($1, $2)
-RETURNING id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+INSERT INTO user_imports (id, total_count, correlation_id)
+VALUES ($1, $2, $3)
+RETURNING id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at, correlation_id
 `
 
 type CreateUserImportParams struct {
-	ID         uuid.UUID `json:"id"`
-	TotalCount int32     `json:"total_count"`
+	ID            uuid.UUID `json:"id"`
+	TotalCount    int32     `json:"total_count"`
+	CorrelationID string    `json:"correlation_id"`
 }
 
 func (q *Queries) CreateUserImport(ctx context.Context, arg CreateUserImportParams) (UserImport, error) {
-	row := q.db.QueryRow(ctx, createUserImport, arg.ID, arg.TotalCount)
+	row := q.db.QueryRow(ctx, createUserImport, arg.ID, arg.TotalCount, arg.CorrelationID)
 	var i UserImport
 	err := row.Scan(
 		&i.ID,
@@ -88,6 +89,7 @@ func (q *Queries) CreateUserImport(ctx context.Context, arg CreateUserImportPara
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.CorrelationID,
 	)
 	return i, err
 }
@@ -153,7 +155,7 @@ SET
     finished_at = now()
 FROM counts
 WHERE id = $1
-RETURNING id, state, total_count, user_imports.completed_count, user_imports.failed_count, created_at, started_at, finished_at
+RETURNING user_imports.id, user_imports.state, user_imports.total_count, user_imports.completed_count, user_imports.failed_count, user_imports.created_at, user_imports.started_at, user_imports.finished_at, user_imports.correlation_id
 `
 
 func (q *Queries) FinishUserImport(ctx context.Context, id uuid.UUID) (UserImport, error) {
@@ -168,6 +170,7 @@ func (q *Queries) FinishUserImport(ctx context.Context, id uuid.UUID) (UserImpor
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.CorrelationID,
 	)
 	return i, err
 }
@@ -199,7 +202,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserImport = `-- name: GetUserImport :one
-SELECT id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+SELECT id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at, correlation_id
 FROM user_imports
 WHERE id = $1
 `
@@ -216,31 +219,42 @@ func (q *Queries) GetUserImport(ctx context.Context, id uuid.UUID) (UserImport, 
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.CorrelationID,
 	)
 	return i, err
 }
 
 const listPendingUserImportEntries = `-- name: ListPendingUserImportEntries :many
-SELECT import_id, user_id, email, state
-FROM user_import_entries
-WHERE import_id = $1 AND state = 'pending'
+SELECT entries.import_id, entries.user_id, entries.email, entries.state, imports.correlation_id
+FROM user_import_entries AS entries
+JOIN user_imports AS imports ON imports.id = entries.import_id
+WHERE entries.import_id = $1 AND entries.state = 'pending'
 ORDER BY email
 `
 
-func (q *Queries) ListPendingUserImportEntries(ctx context.Context, importID uuid.UUID) ([]UserImportEntry, error) {
+type ListPendingUserImportEntriesRow struct {
+	ImportID      uuid.UUID            `json:"import_id"`
+	UserID        uuid.UUID            `json:"user_id"`
+	Email         string               `json:"email"`
+	State         UserImportEntryState `json:"state"`
+	CorrelationID string               `json:"correlation_id"`
+}
+
+func (q *Queries) ListPendingUserImportEntries(ctx context.Context, importID uuid.UUID) ([]ListPendingUserImportEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listPendingUserImportEntries, importID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []UserImportEntry{}
+	items := []ListPendingUserImportEntriesRow{}
 	for rows.Next() {
-		var i UserImportEntry
+		var i ListPendingUserImportEntriesRow
 		if err := rows.Scan(
 			&i.ImportID,
 			&i.UserID,
 			&i.Email,
 			&i.State,
+			&i.CorrelationID,
 		); err != nil {
 			return nil, err
 		}

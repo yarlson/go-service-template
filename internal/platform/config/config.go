@@ -61,6 +61,9 @@ type WorkerConfig struct {
 	DatabaseURL      string        `env:"DATABASE_URL,required"`
 	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s"`
 	OTLPHTTPEndpoint string        `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	AWSRegion        string        `env:"AWS_REGION" envDefault:"eu-west-1"`
+	AWSEndpointURL   string        `env:"AWS_ENDPOINT_URL"`
+	UserEventsTopic  string        `env:"USER_EVENTS_TOPIC_ARN"`
 }
 
 func Load() (Config, error) {
@@ -164,6 +167,15 @@ func (c WorkerConfig) Validate() error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		return errors.New("SHUTDOWN_TIMEOUT must be greater than zero")
+	}
+	if c.AWSRegion == "" {
+		return errors.New("AWS_REGION is required")
+	}
+	if c.Environment == EnvironmentProduction && c.AWSEndpointURL != "" {
+		return errors.New("AWS_ENDPOINT_URL is not allowed in production")
+	}
+	if c.Environment == EnvironmentProduction && c.UserEventsTopic == "" {
+		return errors.New("USER_EVENTS_TOPIC_ARN is required in production")
 	}
 	return nil
 }
