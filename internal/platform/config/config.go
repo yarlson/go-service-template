@@ -64,6 +64,7 @@ type WorkerConfig struct {
 	AWSRegion        string        `env:"AWS_REGION" envDefault:"eu-west-1"`
 	AWSEndpointURL   string        `env:"AWS_ENDPOINT_URL"`
 	UserEventsTopic  string        `env:"USER_EVENTS_TOPIC_ARN"`
+	PermissionsQueue string        `env:"PERMISSIONS_QUEUE_URL"`
 }
 
 func Load() (Config, error) {
@@ -176,6 +177,9 @@ func (c WorkerConfig) Validate() error {
 	}
 	if c.Environment == EnvironmentProduction && c.UserEventsTopic == "" {
 		return errors.New("USER_EVENTS_TOPIC_ARN is required in production")
+	}
+	if c.Environment == EnvironmentProduction && c.PermissionsQueue == "" {
+		return errors.New("PERMISSIONS_QUEUE_URL is required in production")
 	}
 	return nil
 }

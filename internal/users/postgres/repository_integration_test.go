@@ -57,6 +57,41 @@ func TestUserRepositoryIntegration(t *testing.T) {
 	assert.Contains(t, string(jobs.Jobs[0].EncodedArgs), "request-123")
 }
 
+func TestPermissionRepositoryAppliesOnlyNewEventsAndRevisions(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewPermissionRepository(pool)
+	userID := uuid.MustParse("0198a1f7-30b7-7df7-8491-c47f6033525b")
+
+	result, err := repository.ApplyPermissionChange(t.Context(), users.PermissionChange{
+		EventID: "event-2", UserID: userID, Revision: 2, Permissions: []string{"read", "write"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, users.PermissionChangeApplied, result)
+
+	result, err = repository.ApplyPermissionChange(t.Context(), users.PermissionChange{
+		EventID: "event-2", UserID: userID, Revision: 3, Permissions: []string{"admin"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, users.PermissionChangeDuplicate, result)
+
+	result, err = repository.ApplyPermissionChange(t.Context(), users.PermissionChange{
+		EventID: "event-1", UserID: userID, Revision: 1, Permissions: []string{"read"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, users.PermissionChangeStale, result)
+
+	result, err = repository.ApplyPermissionChange(t.Context(), users.PermissionChange{
+		EventID: "event-3", UserID: userID, Revision: 3, Permissions: []string{"admin"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, users.PermissionChangeApplied, result)
+
+	permissions, err := New(pool).GetUserPermissions(t.Context(), userID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), permissions.Revision)
+	assert.Equal(t, []string{"admin"}, permissions.Permissions)
+}
+
 func TestImportRepositoryIntegration(t *testing.T) {
 	pool := newTestPool(t)
 	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})

@@ -9,6 +9,7 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -17,6 +18,7 @@ import (
 	"github.com/your-org/go-service-template/internal/platform/messaging"
 	"github.com/your-org/go-service-template/internal/platform/telemetry"
 	"github.com/your-org/go-service-template/internal/users"
+	usersevents "github.com/your-org/go-service-template/internal/users/events"
 	usersjobs "github.com/your-org/go-service-template/internal/users/jobs"
 	userspostgres "github.com/your-org/go-service-template/internal/users/postgres"
 )
@@ -51,7 +53,8 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 		usersjobs.QueueUsers: {MaxWorkers: 5},
 	}
 	var eventPublisher *messaging.SNSTopicPublisher
-	if cfg.UserEventsTopic != "" {
+	var permissionsConsumer *messaging.SQSConsumer
+	if cfg.UserEventsTopic != "" || cfg.PermissionsQueue != "" {
 		loadOptions := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(cfg.AWSRegion)}
 		if cfg.AWSEndpointURL != "" {
 			loadOptions = append(loadOptions, awsconfig.WithBaseEndpoint(cfg.AWSEndpointURL))
@@ -60,10 +63,22 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 		if err != nil {
 			return fmt.Errorf("load AWS configuration: %w", err)
 		}
-		eventPublisher = messaging.NewSNSTopicPublisher(sns.NewFromConfig(awsConfig), cfg.UserEventsTopic)
-		queues[usersjobs.QueueEvents] = river.QueueConfig{MaxWorkers: 10}
-	} else {
+		if cfg.UserEventsTopic != "" {
+			eventPublisher = messaging.NewSNSTopicPublisher(sns.NewFromConfig(awsConfig), cfg.UserEventsTopic)
+			queues[usersjobs.QueueEvents] = river.QueueConfig{MaxWorkers: 10}
+		}
+		if cfg.PermissionsQueue != "" {
+			permissionRepository := userspostgres.NewPermissionRepository(pool)
+			permissionService := users.NewPermissionService(permissionRepository)
+			permissionHandler := usersevents.NewPermissionHandler(permissionService)
+			permissionsConsumer = messaging.NewSQSConsumer(sqs.NewFromConfig(awsConfig), cfg.PermissionsQueue, permissionHandler, logger)
+		}
+	}
+	if eventPublisher == nil {
 		logger.Warn("external event publication disabled", "reason", "USER_EVENTS_TOPIC_ARN is empty")
+	}
+	if permissionsConsumer == nil {
+		logger.Warn("external event consumption disabled", "reason", "PERMISSIONS_QUEUE_URL is empty")
 	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Logger:              logger,
@@ -91,7 +106,21 @@ func RunWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger
 	}
 	logger.Info("worker started", "queue", usersjobs.QueueUsers, "max_workers", 5)
 
-	<-ctx.Done()
+	consumerErrors := make(chan error, 1)
+	if permissionsConsumer != nil {
+		go func() { consumerErrors <- permissionsConsumer.Run(ctx) }()
+	}
+
+	select {
+	case <-ctx.Done():
+		if permissionsConsumer != nil {
+			<-consumerErrors
+		}
+	case err := <-consumerErrors:
+		if err != nil {
+			return fmt.Errorf("run permissions consumer: %w", err)
+		}
+	}
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer shutdownCancel()
 	if err := client.Stop(shutdownCtx); err != nil {
