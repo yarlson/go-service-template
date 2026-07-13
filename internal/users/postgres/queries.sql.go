@@ -9,7 +9,43 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const completeUserImportEntry = `-- name: CompleteUserImportEntry :exec
+UPDATE user_import_entries
+SET state = 'completed'
+WHERE import_id = $1 AND user_id = $2 AND state = 'pending'
+`
+
+type CompleteUserImportEntryParams struct {
+	ImportID uuid.UUID `json:"import_id"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) CompleteUserImportEntry(ctx context.Context, arg CompleteUserImportEntryParams) error {
+	_, err := q.db.Exec(ctx, completeUserImportEntry, arg.ImportID, arg.UserID)
+	return err
+}
+
+const createImportedUser = `-- name: CreateImportedUser :one
+INSERT INTO users (id, email)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING id
+`
+
+type CreateImportedUserParams struct {
+	ID    uuid.UUID `json:"id"`
+	Email string    `json:"email"`
+}
+
+func (q *Queries) CreateImportedUser(ctx context.Context, arg CreateImportedUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createImportedUser, arg.ID, arg.Email)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email)
@@ -29,6 +65,113 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const createUserImport = `-- name: CreateUserImport :one
+INSERT INTO user_imports (id, total_count)
+VALUES ($1, $2)
+RETURNING id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+`
+
+type CreateUserImportParams struct {
+	ID         uuid.UUID `json:"id"`
+	TotalCount int32     `json:"total_count"`
+}
+
+func (q *Queries) CreateUserImport(ctx context.Context, arg CreateUserImportParams) (UserImport, error) {
+	row := q.db.QueryRow(ctx, createUserImport, arg.ID, arg.TotalCount)
+	var i UserImport
+	err := row.Scan(
+		&i.ID,
+		&i.State,
+		&i.TotalCount,
+		&i.CompletedCount,
+		&i.FailedCount,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const createUserImportEntry = `-- name: CreateUserImportEntry :exec
+INSERT INTO user_import_entries (import_id, user_id, email)
+VALUES ($1, $2, $3)
+`
+
+type CreateUserImportEntryParams struct {
+	ImportID uuid.UUID `json:"import_id"`
+	UserID   uuid.UUID `json:"user_id"`
+	Email    string    `json:"email"`
+}
+
+func (q *Queries) CreateUserImportEntry(ctx context.Context, arg CreateUserImportEntryParams) error {
+	_, err := q.db.Exec(ctx, createUserImportEntry, arg.ImportID, arg.UserID, arg.Email)
+	return err
+}
+
+const deleteFinishedUserImportsBefore = `-- name: DeleteFinishedUserImportsBefore :execrows
+DELETE FROM user_imports
+WHERE state IN ('completed', 'failed') AND finished_at < $1
+`
+
+func (q *Queries) DeleteFinishedUserImportsBefore(ctx context.Context, finishedAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFinishedUserImportsBefore, finishedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failUserImportEntry = `-- name: FailUserImportEntry :exec
+UPDATE user_import_entries
+SET state = 'failed'
+WHERE import_id = $1 AND user_id = $2 AND state = 'pending'
+`
+
+type FailUserImportEntryParams struct {
+	ImportID uuid.UUID `json:"import_id"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) FailUserImportEntry(ctx context.Context, arg FailUserImportEntryParams) error {
+	_, err := q.db.Exec(ctx, failUserImportEntry, arg.ImportID, arg.UserID)
+	return err
+}
+
+const finishUserImport = `-- name: FinishUserImport :one
+WITH counts AS (
+    SELECT
+        count(*) FILTER (WHERE state = 'completed')::integer AS completed_count,
+        count(*) FILTER (WHERE state = 'failed')::integer AS failed_count
+    FROM user_import_entries
+    WHERE import_id = $1
+)
+UPDATE user_imports
+SET
+    state = CASE WHEN counts.failed_count > 0 THEN 'failed'::user_import_state ELSE 'completed'::user_import_state END,
+    completed_count = counts.completed_count,
+    failed_count = counts.failed_count,
+    finished_at = now()
+FROM counts
+WHERE id = $1
+RETURNING id, state, total_count, user_imports.completed_count, user_imports.failed_count, created_at, started_at, finished_at
+`
+
+func (q *Queries) FinishUserImport(ctx context.Context, id uuid.UUID) (UserImport, error) {
+	row := q.db.QueryRow(ctx, finishUserImport, id)
+	var i UserImport
+	err := row.Scan(
+		&i.ID,
+		&i.State,
+		&i.TotalCount,
+		&i.CompletedCount,
+		&i.FailedCount,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, created_at
 FROM users
@@ -40,4 +183,85 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	var i User
 	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
 	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, created_at
+FROM users
+WHERE email = $1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
+	return i, err
+}
+
+const getUserImport = `-- name: GetUserImport :one
+SELECT id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+FROM user_imports
+WHERE id = $1
+`
+
+func (q *Queries) GetUserImport(ctx context.Context, id uuid.UUID) (UserImport, error) {
+	row := q.db.QueryRow(ctx, getUserImport, id)
+	var i UserImport
+	err := row.Scan(
+		&i.ID,
+		&i.State,
+		&i.TotalCount,
+		&i.CompletedCount,
+		&i.FailedCount,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const listPendingUserImportEntries = `-- name: ListPendingUserImportEntries :many
+SELECT import_id, user_id, email, state
+FROM user_import_entries
+WHERE import_id = $1 AND state = 'pending'
+ORDER BY email
+`
+
+func (q *Queries) ListPendingUserImportEntries(ctx context.Context, importID uuid.UUID) ([]UserImportEntry, error) {
+	rows, err := q.db.Query(ctx, listPendingUserImportEntries, importID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserImportEntry{}
+	for rows.Next() {
+		var i UserImportEntry
+		if err := rows.Scan(
+			&i.ImportID,
+			&i.UserID,
+			&i.Email,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const startUserImport = `-- name: StartUserImport :one
+UPDATE user_imports
+SET state = 'running', started_at = COALESCE(started_at, now())
+WHERE id = $1 AND state IN ('pending', 'running')
+RETURNING id
+`
+
+func (q *Queries) StartUserImport(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, startUserImport, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }

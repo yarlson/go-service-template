@@ -72,6 +72,18 @@ func TestLoadParsesLogLevel(t *testing.T) {
 	assert.Equal(t, slog.LevelDebug, cfg.LogLevel.SlogLevel())
 }
 
+func TestLoadWorkerDoesNotRequireAPIConfiguration(t *testing.T) {
+	t.Setenv("APP_ENV", EnvironmentProduction)
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/service?sslmode=disable")
+	t.Setenv("AUTH_MODE", "")
+	t.Setenv("OIDC_ISSUER_URL", "")
+	t.Setenv("OIDC_AUDIENCE", "")
+
+	cfg, err := LoadWorker()
+	require.NoError(t, err)
+	assert.Equal(t, EnvironmentProduction, cfg.Environment)
+}
+
 func TestEnvironmentExampleMatchesConfig(t *testing.T) {
 	t.Parallel()
 

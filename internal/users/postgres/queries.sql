@@ -7,3 +7,72 @@ RETURNING id, email, created_at;
 SELECT id, email, created_at
 FROM users
 WHERE id = $1;
+
+-- name: GetUserByEmail :one
+SELECT id, email, created_at
+FROM users
+WHERE email = $1;
+
+-- name: CreateUserImport :one
+INSERT INTO user_imports (id, total_count)
+VALUES ($1, $2)
+RETURNING id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at;
+
+-- name: CreateUserImportEntry :exec
+INSERT INTO user_import_entries (import_id, user_id, email)
+VALUES ($1, $2, $3);
+
+-- name: GetUserImport :one
+SELECT id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+FROM user_imports
+WHERE id = $1;
+
+-- name: StartUserImport :one
+UPDATE user_imports
+SET state = 'running', started_at = COALESCE(started_at, now())
+WHERE id = $1 AND state IN ('pending', 'running')
+RETURNING id;
+
+-- name: ListPendingUserImportEntries :many
+SELECT import_id, user_id, email, state
+FROM user_import_entries
+WHERE import_id = $1 AND state = 'pending'
+ORDER BY email;
+
+-- name: CreateImportedUser :one
+INSERT INTO users (id, email)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING id;
+
+-- name: CompleteUserImportEntry :exec
+UPDATE user_import_entries
+SET state = 'completed'
+WHERE import_id = $1 AND user_id = $2 AND state = 'pending';
+
+-- name: FailUserImportEntry :exec
+UPDATE user_import_entries
+SET state = 'failed'
+WHERE import_id = $1 AND user_id = $2 AND state = 'pending';
+
+-- name: FinishUserImport :one
+WITH counts AS (
+    SELECT
+        count(*) FILTER (WHERE state = 'completed')::integer AS completed_count,
+        count(*) FILTER (WHERE state = 'failed')::integer AS failed_count
+    FROM user_import_entries
+    WHERE import_id = $1
+)
+UPDATE user_imports
+SET
+    state = CASE WHEN counts.failed_count > 0 THEN 'failed'::user_import_state ELSE 'completed'::user_import_state END,
+    completed_count = counts.completed_count,
+    failed_count = counts.failed_count,
+    finished_at = now()
+FROM counts
+WHERE id = $1
+RETURNING id, state, total_count, user_imports.completed_count, user_imports.failed_count, created_at, started_at, finished_at;
+
+-- name: DeleteFinishedUserImportsBefore :execrows
+DELETE FROM user_imports
+WHERE state IN ('completed', 'failed') AND finished_at < $1;

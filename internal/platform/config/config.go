@@ -54,6 +54,15 @@ type Config struct {
 	OTLPHTTPEndpoint string        `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 }
 
+type WorkerConfig struct {
+	Environment      string        `env:"APP_ENV" envDefault:"development"`
+	ServiceName      string        `env:"SERVICE_NAME" envDefault:"go-service-template"`
+	LogLevel         LogLevel      `env:"LOG_LEVEL" envDefault:"info"`
+	DatabaseURL      string        `env:"DATABASE_URL,required"`
+	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s"`
+	OTLPHTTPEndpoint string        `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+}
+
 func Load() (Config, error) {
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
@@ -64,6 +73,17 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	return cfg, nil
+}
+
+func LoadWorker() (WorkerConfig, error) {
+	var cfg WorkerConfig
+	if err := env.Parse(&cfg); err != nil {
+		return WorkerConfig{}, fmt.Errorf("parse environment: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return WorkerConfig{}, err
+	}
 	return cfg, nil
 }
 
@@ -126,6 +146,25 @@ func (c Config) Validate() error {
 		return errors.New("SHUTDOWN_TIMEOUT must be greater than zero")
 	}
 
+	return nil
+}
+
+func (c WorkerConfig) Validate() error {
+	if !oneOf(c.Environment, EnvironmentDevelopment, EnvironmentTest, EnvironmentProduction) {
+		return fmt.Errorf("APP_ENV must be development, test, or production")
+	}
+	if c.ServiceName == "" {
+		return errors.New("SERVICE_NAME is required")
+	}
+	if !oneOf(c.LogLevel, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError) {
+		return errors.New("LOG_LEVEL must be debug, info, warn, or error")
+	}
+	if err := validateDatabaseURL(c.DatabaseURL); err != nil {
+		return fmt.Errorf("DATABASE_URL: %w", err)
+	}
+	if c.ShutdownTimeout <= 0 {
+		return errors.New("SHUTDOWN_TIMEOUT must be greater than zero")
+	}
 	return nil
 }
 

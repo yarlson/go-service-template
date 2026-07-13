@@ -160,6 +160,14 @@ type apiStub struct {
 	receivedSubject string
 }
 
+func (s *apiStub) CreateUserImport(context.Context, contractapi.CreateUserImportRequestObject) (contractapi.CreateUserImportResponseObject, error) {
+	return contractapi.CreateUserImport202JSONResponse{}, nil
+}
+
+func (s *apiStub) GetUserImport(context.Context, contractapi.GetUserImportRequestObject) (contractapi.GetUserImportResponseObject, error) {
+	return contractapi.GetUserImport200JSONResponse{}, nil
+}
+
 func (s *apiStub) CreateUser(_ context.Context, request contractapi.CreateUserRequestObject) (contractapi.CreateUserResponseObject, error) {
 	return contractapi.CreateUser201JSONResponse{
 		Id:        uuid.MustParse("8d37b313-f867-47bc-8e3d-0953db9c05c8"),

@@ -5,13 +5,121 @@
 package postgres
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type UserImportEntryState string
+
+const (
+	UserImportEntryStatePending   UserImportEntryState = "pending"
+	UserImportEntryStateCompleted UserImportEntryState = "completed"
+	UserImportEntryStateFailed    UserImportEntryState = "failed"
+)
+
+func (e *UserImportEntryState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserImportEntryState(s)
+	case string:
+		*e = UserImportEntryState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserImportEntryState: %T", src)
+	}
+	return nil
+}
+
+type NullUserImportEntryState struct {
+	UserImportEntryState UserImportEntryState `json:"user_import_entry_state"`
+	Valid                bool                 `json:"valid"` // Valid is true if UserImportEntryState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserImportEntryState) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserImportEntryState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserImportEntryState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserImportEntryState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserImportEntryState), nil
+}
+
+type UserImportState string
+
+const (
+	UserImportStatePending   UserImportState = "pending"
+	UserImportStateRunning   UserImportState = "running"
+	UserImportStateCompleted UserImportState = "completed"
+	UserImportStateFailed    UserImportState = "failed"
+)
+
+func (e *UserImportState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserImportState(s)
+	case string:
+		*e = UserImportState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserImportState: %T", src)
+	}
+	return nil
+}
+
+type NullUserImportState struct {
+	UserImportState UserImportState `json:"user_import_state"`
+	Valid           bool            `json:"valid"` // Valid is true if UserImportState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserImportState) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserImportState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserImportState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserImportState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserImportState), nil
+}
 
 type User struct {
 	ID        uuid.UUID `json:"id"`
 	Email     string    `json:"email"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type UserImport struct {
+	ID             uuid.UUID          `json:"id"`
+	State          UserImportState    `json:"state"`
+	TotalCount     int32              `json:"total_count"`
+	CompletedCount int32              `json:"completed_count"`
+	FailedCount    int32              `json:"failed_count"`
+	CreatedAt      time.Time          `json:"created_at"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+}
+
+type UserImportEntry struct {
+	ImportID uuid.UUID            `json:"import_id"`
+	UserID   uuid.UUID            `json:"user_id"`
+	Email    string               `json:"email"`
+	State    UserImportEntryState `json:"state"`
 }

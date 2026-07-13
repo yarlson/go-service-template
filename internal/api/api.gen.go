@@ -27,6 +27,35 @@ const (
 	BearerAuthScopes bearerAuthContextKey = "bearerAuth.Scopes"
 )
 
+// Defines values for UserImportState.
+const (
+	Completed UserImportState = "completed"
+	Failed    UserImportState = "failed"
+	Pending   UserImportState = "pending"
+	Running   UserImportState = "running"
+)
+
+// Valid indicates whether the value is a known member of the UserImportState enum.
+func (e UserImportState) Valid() bool {
+	switch e {
+	case Completed:
+		return true
+	case Failed:
+		return true
+	case Pending:
+		return true
+	case Running:
+		return true
+	default:
+		return false
+	}
+}
+
+// CreateUserImportRequest defines model for CreateUserImportRequest.
+type CreateUserImportRequest struct {
+	Emails []openapi_types.Email `json:"emails"`
+}
+
 // CreateUserRequest defines model for CreateUserRequest.
 type CreateUserRequest struct {
 	Email openapi_types.Email `json:"email"`
@@ -48,6 +77,21 @@ type User struct {
 	Id        openapi_types.UUID  `json:"id"`
 }
 
+// UserImport defines model for UserImport.
+type UserImport struct {
+	CompletedCount int                `json:"completedCount"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	FailedCount    int                `json:"failedCount"`
+	FinishedAt     *time.Time         `json:"finishedAt,omitempty"`
+	Id             openapi_types.UUID `json:"id"`
+	StartedAt      *time.Time         `json:"startedAt,omitempty"`
+	State          UserImportState    `json:"state"`
+	TotalCount     int                `json:"totalCount"`
+}
+
+// UserImportState defines model for UserImport.State.
+type UserImportState string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = Problem
 
@@ -66,11 +110,20 @@ type Unauthorized = Problem
 // bearerAuthContextKey is the context key for bearerAuth security scheme
 type bearerAuthContextKey string
 
+// CreateUserImportJSONRequestBody defines body for CreateUserImport for application/json ContentType.
+type CreateUserImportJSONRequestBody = CreateUserImportRequest
+
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUserRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (POST /v1/user-imports)
+	CreateUserImport(w http.ResponseWriter, r *http.Request)
+
+	// (GET /v1/user-imports/{importId})
+	GetUserImport(w http.ResponseWriter, r *http.Request, importId openapi_types.UUID)
 
 	// (POST /v1/users)
 	CreateUser(w http.ResponseWriter, r *http.Request)
@@ -87,6 +140,58 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// CreateUserImport operation middleware
+func (siw *ServerInterfaceWrapper) CreateUserImport(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUserImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUserImport operation middleware
+func (siw *ServerInterfaceWrapper) GetUserImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "importId" -------------
+	var importId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "importId", r.PathValue("importId"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "importId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUserImport(w, r, importId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CreateUser operation middleware
 func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -260,6 +365,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/user-imports", wrapper.CreateUserImport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/user-imports/{importId}", wrapper.GetUserImport)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/users", wrapper.CreateUser)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/users/{userId}", wrapper.GetUser)
 
@@ -275,6 +382,146 @@ type InternalErrorApplicationProblemPlusJSONResponse Problem
 type NotFoundApplicationProblemPlusJSONResponse Problem
 
 type UnauthorizedApplicationProblemPlusJSONResponse Problem
+
+type CreateUserImportRequestObject struct {
+	Body *CreateUserImportJSONRequestBody
+}
+
+type CreateUserImportResponseObject interface {
+	VisitCreateUserImportResponse(w http.ResponseWriter) error
+}
+
+type CreateUserImport202JSONResponse UserImport
+
+func (response CreateUserImport202JSONResponse) VisitCreateUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserImport400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUserImport400ApplicationProblemPlusJSONResponse) VisitCreateUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUserImport401ApplicationProblemPlusJSONResponse) VisitCreateUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserImport500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUserImport500ApplicationProblemPlusJSONResponse) VisitCreateUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserImportRequestObject struct {
+	ImportId openapi_types.UUID `json:"importId"`
+}
+
+type GetUserImportResponseObject interface {
+	VisitGetUserImportResponse(w http.ResponseWriter) error
+}
+
+type GetUserImport200JSONResponse UserImport
+
+func (response GetUserImport200JSONResponse) VisitGetUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserImport401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetUserImport401ApplicationProblemPlusJSONResponse) VisitGetUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserImport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetUserImport404ApplicationProblemPlusJSONResponse) VisitGetUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserImport500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetUserImport500ApplicationProblemPlusJSONResponse) VisitGetUserImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type CreateUserRequestObject struct {
 	Body *CreateUserJSONRequestBody
@@ -451,6 +698,12 @@ func (response GetUser500ApplicationProblemPlusJSONResponse) VisitGetUserRespons
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
+	// (POST /v1/user-imports)
+	CreateUserImport(ctx context.Context, request CreateUserImportRequestObject) (CreateUserImportResponseObject, error)
+
+	// (GET /v1/user-imports/{importId})
+	GetUserImport(ctx context.Context, request GetUserImportRequestObject) (GetUserImportResponseObject, error)
+
 	// (POST /v1/users)
 	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
 
@@ -485,6 +738,63 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// CreateUserImport operation middleware
+func (sh *strictHandler) CreateUserImport(w http.ResponseWriter, r *http.Request) {
+	var request CreateUserImportRequestObject
+
+	var body CreateUserImportJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUserImport(ctx, request.(CreateUserImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUserImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUserImportResponseObject); ok {
+		if err := validResponse.VisitCreateUserImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUserImport operation middleware
+func (sh *strictHandler) GetUserImport(w http.ResponseWriter, r *http.Request, importId openapi_types.UUID) {
+	var request GetUserImportRequestObject
+
+	request.ImportId = importId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUserImport(ctx, request.(GetUserImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUserImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUserImportResponseObject); ok {
+		if err := validResponse.VisitGetUserImportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // CreateUser operation middleware
@@ -549,18 +859,22 @@ func (sh *strictHandler) GetUser(w http.ResponseWriter, r *http.Request, userId 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"dBXYKYfu3+bpxPBDlIq6/jcAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

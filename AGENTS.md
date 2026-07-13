@@ -26,6 +26,7 @@ internal/platform/       shared runtime and infrastructure adapters
 internal/<feature>/      feature domain and use cases
 internal/<feature>/http/ feature HTTP adapter
 internal/<feature>/postgres/ feature PostgreSQL adapter and queries
+internal/<feature>/jobs/ feature background-job adapters
 api/                     canonical OpenAPI document
 db/migrations/           application-wide ordered schema history
 ```
@@ -42,6 +43,8 @@ Preserve these dependency rules:
   types, and narrowly required platform packages.
 - Feature PostgreSQL adapters depend on their feature domain and local
   sqlc-generated code. They must not import HTTP or OpenAPI transport types.
+- Feature job adapters may depend on their feature domain and the selected job
+  runtime. Keep job arguments small and free of user payloads.
 - Platform packages must never import feature packages or construct feature
   handlers.
 - If the generated API interface spans multiple features, compose feature
