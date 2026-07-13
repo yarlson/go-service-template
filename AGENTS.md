@@ -110,6 +110,8 @@ Keep `/asyncapi.yaml` serving the exact canonical asynchronous document and run
   separate application log threshold.
 - Generate new persisted identifiers and server-generated request IDs as
   UUIDv7. Preserve valid request IDs supplied by callers unchanged.
+- Preserve the request correlation ID in asynchronous event metadata. External
+  event IDs and timestamps must remain stable across publication retries.
 - Avoid mutable package globals and implicit initialization side effects.
 - Comments describe current behavior, constraints, or non-obvious invariants.
   Do not narrate edit history or restate straightforward code.

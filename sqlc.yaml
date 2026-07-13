@@ -4,6 +4,7 @@ sql:
     schema:
       - db/migrations/000001_create_users.up.sql
       - db/migrations/000008_create_user_imports.up.sql
+      - db/migrations/000009_add_user_import_correlation.up.sql
     queries: internal/users/postgres/queries.sql
     gen:
       go:

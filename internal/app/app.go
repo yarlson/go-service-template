@@ -62,14 +62,14 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 		return err
 	}
 
-	queries := userspostgres.New(pool)
-	repository := userspostgres.NewUserRepository(queries)
-	userService := users.NewService(repository)
 	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Logger: logger})
 	if err != nil {
 		return fmt.Errorf("create River enqueue client: %w", err)
 	}
-	importRepository := userspostgres.NewImportRepository(pool, usersjobs.NewEnqueuer(jobClient))
+	jobEnqueuer := usersjobs.NewEnqueuer(jobClient)
+	repository := userspostgres.NewUserRepository(pool, jobEnqueuer)
+	userService := users.NewService(repository)
+	importRepository := userspostgres.NewImportRepository(pool, jobEnqueuer)
 	importService := users.NewImportService(importRepository)
 	usersHandler := usershttp.NewHandler(logger, userService, importService)
 	readiness := httpserver.NewReadiness(pool, telemetryRuntime.RecordDatabaseCheck)

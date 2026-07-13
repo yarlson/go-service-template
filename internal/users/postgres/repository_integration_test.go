@@ -20,18 +20,21 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/your-org/go-service-template/internal/platform/database"
+	"github.com/your-org/go-service-template/internal/platform/messaging"
 	"github.com/your-org/go-service-template/internal/users"
 	usersjobs "github.com/your-org/go-service-template/internal/users/jobs"
 )
 
 func TestUserRepositoryIntegration(t *testing.T) {
 	pool := newTestPool(t)
-	repository := NewUserRepository(New(pool))
+	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	require.NoError(t, err)
+	repository := NewUserRepository(pool, usersjobs.NewEnqueuer(jobClient))
 	want := users.User{
 		ID:    uuid.MustParse("8d37b313-f867-47bc-8e3d-0953db9c05c8"),
 		Email: "person@example.com",
 	}
-	created, err := repository.Create(t.Context(), want)
+	created, err := repository.Create(messaging.WithCorrelationID(t.Context(), "request-123"), want)
 	require.NoError(t, err)
 	assert.Equal(t, want.ID, created.ID)
 	assert.Equal(t, want.Email, created.Email)
@@ -46,6 +49,12 @@ func TestUserRepositoryIntegration(t *testing.T) {
 
 	_, err = repository.Get(t.Context(), uuid.New())
 	require.ErrorIs(t, err, users.ErrNotFound)
+
+	jobs, err := jobClient.JobList(t.Context(), river.NewJobListParams().Kinds("users.publish-created"))
+	require.NoError(t, err)
+	require.Len(t, jobs.Jobs, 1)
+	assert.NotContains(t, string(jobs.Jobs[0].EncodedArgs), want.Email)
+	assert.Contains(t, string(jobs.Jobs[0].EncodedArgs), "request-123")
 }
 
 func TestImportRepositoryIntegration(t *testing.T) {
@@ -84,6 +93,20 @@ func TestImportRepositoryIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, entry.Email, user.Email)
 	}
+	publicationJobs, err := jobClient.JobList(t.Context(), river.NewJobListParams().Kinds("users.publish-created"))
+	require.NoError(t, err)
+	assert.Len(t, publicationJobs.Jobs, 2)
+}
+
+func TestUserRepositoryRollsBackWhenPublicationEnqueueFails(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewUserRepository(pool, failingImportEnqueuer{})
+	userID := uuid.MustParse("0198a1f7-30b7-7df6-8491-c47f6033525b")
+
+	_, err := repository.Create(t.Context(), users.User{ID: userID, Email: "atomic@example.com"})
+	require.Error(t, err)
+	_, err = New(pool).GetUser(t.Context(), userID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestImportRepositoryRollsBackWhenEnqueueFails(t *testing.T) {
@@ -105,7 +128,7 @@ func TestImportRepositoryMarksConflictingEmailFailedAndCleansItUp(t *testing.T) 
 	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
 	require.NoError(t, err)
 	repository := NewImportRepository(pool, usersjobs.NewEnqueuer(jobClient))
-	_, err = NewUserRepository(New(pool)).Create(t.Context(), users.User{ID: uuid.New(), Email: "existing@example.com"})
+	_, err = NewUserRepository(pool, usersjobs.NewEnqueuer(jobClient)).Create(t.Context(), users.User{ID: uuid.New(), Email: "existing@example.com"})
 	require.NoError(t, err)
 
 	importID := uuid.MustParse("0198a1f7-30b7-7df5-8491-c47f6033525b")
@@ -168,6 +191,10 @@ func TestImportJobReachesFinalFailureState(t *testing.T) {
 type failingImportEnqueuer struct{}
 
 func (failingImportEnqueuer) EnqueueImport(context.Context, pgx.Tx, uuid.UUID) error {
+	return errors.New("enqueue failed")
+}
+
+func (failingImportEnqueuer) EnqueueUserCreated(context.Context, pgx.Tx, uuid.UUID, string) error {
 	return errors.New("enqueue failed")
 }
 

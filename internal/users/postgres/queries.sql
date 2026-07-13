@@ -14,16 +14,16 @@ FROM users
 WHERE email = $1;
 
 -- name: CreateUserImport :one
-INSERT INTO user_imports (id, total_count)
-VALUES ($1, $2)
-RETURNING id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at;
+INSERT INTO user_imports (id, total_count, correlation_id)
+VALUES ($1, $2, $3)
+RETURNING *;
 
 -- name: CreateUserImportEntry :exec
 INSERT INTO user_import_entries (import_id, user_id, email)
 VALUES ($1, $2, $3);
 
 -- name: GetUserImport :one
-SELECT id, state, total_count, completed_count, failed_count, created_at, started_at, finished_at
+SELECT *
 FROM user_imports
 WHERE id = $1;
 
@@ -34,9 +34,10 @@ WHERE id = $1 AND state IN ('pending', 'running')
 RETURNING id;
 
 -- name: ListPendingUserImportEntries :many
-SELECT import_id, user_id, email, state
-FROM user_import_entries
-WHERE import_id = $1 AND state = 'pending'
+SELECT entries.import_id, entries.user_id, entries.email, entries.state, imports.correlation_id
+FROM user_import_entries AS entries
+JOIN user_imports AS imports ON imports.id = entries.import_id
+WHERE entries.import_id = $1 AND entries.state = 'pending'
 ORDER BY email;
 
 -- name: CreateImportedUser :one
@@ -71,7 +72,7 @@ SET
     finished_at = now()
 FROM counts
 WHERE id = $1
-RETURNING id, state, total_count, user_imports.completed_count, user_imports.failed_count, created_at, started_at, finished_at;
+RETURNING user_imports.*;
 
 -- name: DeleteFinishedUserImportsBefore :execrows
 DELETE FROM user_imports

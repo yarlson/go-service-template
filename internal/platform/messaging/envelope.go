@@ -1,12 +1,24 @@
 package messaging
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+type correlationIDKey struct{}
+
+func WithCorrelationID(ctx context.Context, correlationID string) context.Context {
+	return context.WithValue(ctx, correlationIDKey{}, correlationID)
+}
+
+func CorrelationID(ctx context.Context) string {
+	correlationID, _ := ctx.Value(correlationIDKey{}).(string)
+	return correlationID
+}
 
 type Metadata struct {
 	SchemaVersion  string `json:"schemaVersion"`
