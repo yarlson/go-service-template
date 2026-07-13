@@ -5,6 +5,7 @@ MODULE :=
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 SOURCE_URL ?= https://github.com/yarlson/go-service-template
+WORKER_HTTP_ADDRESS ?= :8081
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 ASYNCAPI_CLI_IMAGE := asyncapi/cli:5.0.7@sha256:b861d57b05dc1afeb8ddd52efe0acd8313367938c2ca86f55a9a26428af4f1d2
 
@@ -24,7 +25,7 @@ dev: .env ## Run the API with local configuration
 	@set -a; . ./.env; set +a; go run ./cmd/service api
 
 worker: .env ## Run durable background jobs with local configuration
-	@set -a; . ./.env; set +a; go run ./cmd/service worker
+	@set -a; . ./.env; set +a; HTTP_ADDRESS='$(WORKER_HTTP_ADDRESS)' go run ./cmd/service worker
 
 migrate: .env ## Apply all pending database migrations
 	@set -a; . ./.env; set +a; go run ./cmd/service migrate

@@ -113,6 +113,42 @@ func TestHandlerServesMetrics(t *testing.T) {
 	assert.Equal(t, "service_requests_total 1\n", response.Body.String())
 }
 
+func TestOperationsHandlerExposesOnlyOperationalEndpoints(t *testing.T) {
+	t.Parallel()
+
+	readiness := httpserver.NewPausedReadiness(pingerStub{}, nil)
+	handler, err := httpserver.NewOperationsHandler(httpserver.OperationsHandlerOptions{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Readiness: readiness,
+		Metrics: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		Version: "test", Commit: "commit",
+	})
+	require.NoError(t, err)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/readyz", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
+	readiness.StartAccepting()
+
+	for path, wantStatus := range map[string]int{
+		"/livez":        http.StatusOK,
+		"/readyz":       http.StatusOK,
+		"/metrics":      http.StatusNoContent,
+		"/openapi.yaml": http.StatusNotFound,
+		"/v1/users":     http.StatusNotFound,
+	} {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		assert.Equal(t, wantStatus, response.Code, "GET %s", path)
+	}
+
+	readiness.StopAccepting()
+	request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/readyz", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
+}
+
 func TestHandlerRequestID(t *testing.T) {
 	t.Parallel()
 

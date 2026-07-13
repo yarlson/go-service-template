@@ -58,6 +58,7 @@ type WorkerConfig struct {
 	Environment      string        `env:"APP_ENV" envDefault:"development"`
 	ServiceName      string        `env:"SERVICE_NAME" envDefault:"go-service-template"`
 	LogLevel         LogLevel      `env:"LOG_LEVEL" envDefault:"info"`
+	HTTPAddress      string        `env:"HTTP_ADDRESS" envDefault:":8080"`
 	DatabaseURL      string        `env:"DATABASE_URL,required"`
 	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s"`
 	OTLPHTTPEndpoint string        `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
@@ -127,7 +128,6 @@ func (c Config) Validate() error {
 	if !oneOf(c.LogLevel, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError) {
 		return errors.New("LOG_LEVEL must be debug, info, warn, or error")
 	}
-
 	if err := validateAddress(c.HTTPAddress); err != nil {
 		return fmt.Errorf("HTTP_ADDRESS: %w", err)
 	}
@@ -162,6 +162,9 @@ func (c WorkerConfig) Validate() error {
 	}
 	if !oneOf(c.LogLevel, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError) {
 		return errors.New("LOG_LEVEL must be debug, info, warn, or error")
+	}
+	if err := validateAddress(c.HTTPAddress); err != nil {
+		return fmt.Errorf("HTTP_ADDRESS: %w", err)
 	}
 	if err := validateDatabaseURL(c.DatabaseURL); err != nil {
 		return fmt.Errorf("DATABASE_URL: %w", err)
