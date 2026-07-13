@@ -156,6 +156,7 @@ db/migrations/          application-wide schema migrations
 internal/api/           generated OpenAPI transport contract
 internal/app/           runtime composition and shutdown
 internal/platform/      shared runtime adapters and infrastructure
+infra/                  deployer-owned AWS messaging topology
 internal/users/         users domain behavior and repository contract
 internal/users/http/    users HTTP adapter
 internal/users/jobs/    users River job adapters
@@ -178,6 +179,22 @@ rejected in production. With no topic or queue in development, the matching
 external event path is disabled while the private `users` queue continues to
 run. The worker consumes in batches of up to ten with bounded concurrency and
 deletes a message only after its database transaction commits.
+
+[`infra/aws-messaging.yaml`](infra/aws-messaging.yaml) is the deployer-owned
+CloudFormation recipe. It creates the outbound user-events topic and the
+service-owned permissions queue, encrypted DLQ, standard SNS subscription,
+restrictive queue policy, five-receive redrive policy, and least-privilege
+worker policy. Supply the upstream `PermissionsTopicArn`; that topic's owner
+must permit the deployment account to subscribe when it is cross-account. Use
+the template outputs for `USER_EVENTS_TOPIC_ARN` and `PERMISSIONS_QUEUE_URL`.
+The application validates configuration but never creates or discovers this
+topology at runtime.
+
+`make test-integration` starts pinned PostgreSQL and LocalStack containers. The
+AWS test proves message-body filtering, the standard SNS wrapper, successful
+SQS acknowledgement, and DLQ redrive. LocalStack does not prove production IAM
+or cross-account topic policy, so release validation still requires an AWS
+sandbox round trip.
 
 ## Create a service from the template
 
