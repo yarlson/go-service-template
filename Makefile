@@ -10,7 +10,7 @@ ASYNCAPI_CLI_IMAGE := asyncapi/cli:5.0.7@sha256:b861d57b05dc1afeb8ddd52efe0acd83
 
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev migrate generate generate-check asyncapi-check fmt fmt-check lint test test-race test-integration check build docker-build docker-test compose-up compose-down clean rename
+.PHONY: help bootstrap dev worker migrate generate generate-check asyncapi-check fmt fmt-check lint test test-race test-integration check build docker-build docker-test compose-up compose-down clean rename
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,6 +22,9 @@ bootstrap: .env compose-up migrate ## Create local config, start PostgreSQL, and
 
 dev: .env ## Run the API with local configuration
 	@set -a; . ./.env; set +a; go run ./cmd/service api
+
+worker: .env ## Run durable background jobs with local configuration
+	@set -a; . ./.env; set +a; go run ./cmd/service worker
 
 migrate: .env ## Apply all pending database migrations
 	@set -a; . ./.env; set +a; go run ./cmd/service migrate

@@ -25,7 +25,7 @@ func TestHandlerCreateUser(t *testing.T) {
 		CreatedAt: time.Date(2026, time.July, 11, 12, 0, 0, 0, time.UTC),
 	}
 	service := &userServiceStub{createUser: want}
-	handler := NewHandler(discardLogger(), service)
+	handler := NewHandler(discardLogger(), service, &importServiceStub{})
 
 	response, err := handler.CreateUser(t.Context(), contractapi.CreateUserRequestObject{
 		Body: &contractapi.CreateUserJSONRequestBody{Email: openapi_types.Email(want.Email)},
@@ -64,7 +64,7 @@ func TestHandlerMapsUserErrors(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			handler := NewHandler(discardLogger(), &userServiceStub{createErr: testCase.serviceError})
+			handler := NewHandler(discardLogger(), &userServiceStub{createErr: testCase.serviceError}, &importServiceStub{})
 			response, err := handler.CreateUser(t.Context(), contractapi.CreateUserRequestObject{
 				Body: &contractapi.CreateUserJSONRequestBody{Email: openapi_types.Email("person@example.com")},
 			})
@@ -72,6 +72,29 @@ func TestHandlerMapsUserErrors(t *testing.T) {
 			testCase.assertResponse(t, response)
 		})
 	}
+}
+
+func TestHandlerCreatesUserImport(t *testing.T) {
+	t.Parallel()
+
+	want := users.Import{
+		ID:         uuid.MustParse("0198a1f7-30b7-7df1-8491-c47f6033525b"),
+		State:      users.ImportStatePending,
+		TotalCount: 2,
+		CreatedAt:  time.Date(2026, time.July, 13, 2, 0, 0, 0, time.UTC),
+	}
+	imports := &importServiceStub{created: want}
+	handler := NewHandler(discardLogger(), &userServiceStub{}, imports)
+	response, err := handler.CreateUserImport(t.Context(), contractapi.CreateUserImportRequestObject{
+		Body: &contractapi.CreateUserImportJSONRequestBody{Emails: []openapi_types.Email{"one@example.com", "two@example.com"}},
+	})
+	require.NoError(t, err)
+
+	created, ok := response.(contractapi.CreateUserImport202JSONResponse)
+	require.True(t, ok)
+	assert.Equal(t, want.ID, created.Id)
+	assert.Equal(t, want.TotalCount, created.TotalCount)
+	assert.Equal(t, []string{"one@example.com", "two@example.com"}, imports.receivedEmails)
 }
 
 func discardLogger() *slog.Logger {
@@ -91,4 +114,19 @@ func (s *userServiceStub) Create(_ context.Context, email string) (users.User, e
 
 func (s *userServiceStub) Get(context.Context, uuid.UUID) (users.User, error) {
 	return users.User{}, nil
+}
+
+type importServiceStub struct {
+	created        users.Import
+	createErr      error
+	receivedEmails []string
+}
+
+func (s *importServiceStub) Create(_ context.Context, emails []string) (users.Import, error) {
+	s.receivedEmails = emails
+	return s.created, s.createErr
+}
+
+func (s *importServiceStub) Get(context.Context, uuid.UUID) (users.Import, error) {
+	return users.Import{}, nil
 }

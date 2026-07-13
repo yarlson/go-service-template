@@ -37,9 +37,8 @@ func NewService(repository Repository) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, email string) (User, error) {
-	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
-	address, err := mail.ParseAddress(normalizedEmail)
-	if err != nil || address.Address != normalizedEmail {
+	normalizedEmail, err := normalizeEmail(email)
+	if err != nil {
 		return User{}, ErrInvalidEmail
 	}
 
@@ -57,6 +56,15 @@ func (s *Service) Create(ctx context.Context, email string) (User, error) {
 	}
 
 	return user, nil
+}
+
+func normalizeEmail(email string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	address, err := mail.ParseAddress(normalized)
+	if err != nil || address.Address != normalized {
+		return "", ErrInvalidEmail
+	}
+	return normalized, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (User, error) {

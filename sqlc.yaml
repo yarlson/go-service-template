@@ -1,7 +1,9 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: db/migrations
+    schema:
+      - db/migrations/000001_create_users.up.sql
+      - db/migrations/000008_create_user_imports.up.sql
     queries: internal/users/postgres/queries.sql
     gen:
       go:

@@ -3,6 +3,55 @@ info:
   title: Go Service Template API
   version: 0.1.0
 paths:
+  /v1/user-imports:
+    post:
+      operationId: createUserImport
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserImportRequest'
+      responses:
+        '202':
+          description: User import accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserImport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/user-imports/{importId}:
+    get:
+      operationId: getUserImport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserImport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /v1/users:
     post:
       operationId: createUser
@@ -63,6 +112,56 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    CreateUserImportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - emails
+      properties:
+        emails:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            format: email
+            maxLength: 320
+    UserImport:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - state
+        - totalCount
+        - completedCount
+        - failedCount
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [pending, running, completed, failed]
+        totalCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        completedCount:
+          type: integer
+          minimum: 0
+        failedCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
     CreateUserRequest:
       type: object
       additionalProperties: false

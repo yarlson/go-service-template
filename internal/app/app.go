@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/your-org/go-service-template/internal/platform/auth"
@@ -21,6 +23,7 @@ import (
 	"github.com/your-org/go-service-template/internal/platform/telemetry"
 	"github.com/your-org/go-service-template/internal/users"
 	usershttp "github.com/your-org/go-service-template/internal/users/http"
+	usersjobs "github.com/your-org/go-service-template/internal/users/jobs"
 	userspostgres "github.com/your-org/go-service-template/internal/users/postgres"
 )
 
@@ -62,7 +65,13 @@ func RunAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, build B
 	queries := userspostgres.New(pool)
 	repository := userspostgres.NewUserRepository(queries)
 	userService := users.NewService(repository)
-	usersHandler := usershttp.NewHandler(logger, userService)
+	jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Logger: logger})
+	if err != nil {
+		return fmt.Errorf("create River enqueue client: %w", err)
+	}
+	importRepository := userspostgres.NewImportRepository(pool, usersjobs.NewEnqueuer(jobClient))
+	importService := users.NewImportService(importRepository)
+	usersHandler := usershttp.NewHandler(logger, userService, importService)
 	readiness := httpserver.NewReadiness(pool, telemetryRuntime.RecordDatabaseCheck)
 	handler, err := httpserver.NewHandler(httpserver.HandlerOptions{
 		Logger:    logger,
