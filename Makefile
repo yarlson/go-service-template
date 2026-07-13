@@ -60,8 +60,8 @@ test: ## Run unit tests
 test-race: ## Run unit tests with the race detector
 	go test -race ./...
 
-test-integration: ## Run tests against isolated PostgreSQL containers
-	go test -count=1 -tags=integration ./internal/users/postgres
+test-integration: ## Run tests against isolated PostgreSQL and AWS-compatible containers
+	go test -count=1 -tags=integration ./internal/platform/messaging ./internal/users/postgres
 
 check: asyncapi-check generate-check fmt-check lint test test-race test-integration ## Run the complete local verification suite
 	go mod tidy -diff

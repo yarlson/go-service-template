@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SNS and SQS resources owned by a service generated from go-service-template
+
+Parameters:
+  ResourcePrefix:
+    Type: String
+    Description: Environment-specific prefix for resource names
+  ServiceName:
+    Type: String
+    Default: go-service-template
+    AllowedPattern: '[a-z0-9-]+'
+  PermissionsTopicArn:
+    Type: String
+    Description: ARN of the upstream topic that publishes permissions.changed
+
+Resources:
+  UserEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ResourcePrefix}-${ServiceName}-user-events'
+
+  PermissionsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ResourcePrefix}-${ServiceName}-permissions-dlq'
+      MessageRetentionPeriod: 604800
+      SqsManagedSseEnabled: true
+
+  PermissionsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ResourcePrefix}-${ServiceName}-permissions'
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 120
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PermissionsDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  PermissionsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref PermissionsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPermissionsTopic
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt PermissionsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref PermissionsTopicArn
+
+  PermissionsSubscription:
+    Type: AWS::SNS::Subscription
+    DependsOn: PermissionsQueuePolicy
+    Properties:
+      TopicArn: !Ref PermissionsTopicArn
+      Protocol: sqs
+      Endpoint: !GetAtt PermissionsQueue.Arn
+      RawMessageDelivery: false
+      FilterPolicyScope: MessageBody
+      FilterPolicy:
+        type:
+          - permissions.changed
+
+  WorkerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Publish user events and consume permission changes
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublishUserEvents
+            Effect: Allow
+            Action: sns:Publish
+            Resource: !Ref UserEventsTopic
+          - Sid: ConsumePermissionChanges
+            Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:ChangeMessageVisibility
+              - sqs:GetQueueAttributes
+            Resource: !GetAtt PermissionsQueue.Arn
+
+Outputs:
+  UserEventsTopicArn:
+    Value: !Ref UserEventsTopic
+  PermissionsQueueUrl:
+    Value: !Ref PermissionsQueue
+  PermissionsQueueArn:
+    Value: !GetAtt PermissionsQueue.Arn
+  PermissionsDeadLetterQueueArn:
+    Value: !GetAtt PermissionsDeadLetterQueue.Arn
+  WorkerPolicyArn:
+    Value: !Ref WorkerPolicy
