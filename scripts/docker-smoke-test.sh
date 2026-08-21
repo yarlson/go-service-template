@@ -192,8 +192,9 @@ attempt=0
 while :; do
   published_event=$(docker exec "$localstack_container" awslocal sqs receive-message \
     --queue-url "$probe_queue_url" --wait-time-seconds 1 --query 'Messages[0].Body' --output text)
-  if [ "$published_event" != "None" ] && printf '%s' "$published_event" | grep -q 'user.created'; then
-    printf '%s' "$published_event" | grep -q "$user_id"
+  if [ "$published_event" != "None" ] &&
+    printf '%s' "$published_event" | grep -q 'user.created' &&
+    printf '%s' "$published_event" | grep -q "$user_id"; then
     break
   fi
   attempt=$((attempt + 1))
